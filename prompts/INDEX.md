@@ -9,15 +9,18 @@ Every prompt sent to DevAI is saved as its own file in this folder: `P-XXX-short
 | P-002 | P-002-decisions-update.md | F-02, F-04, F-05, F-06, F-09 (docs) | Resolve open questions, correct docs, add D-019 to D-027 | 2026-11-03 | answered, accepted |
 | P-003 | P-003-F-02-schema.md | F-02 | Design, content, profile schemas with Zod validation and tests; adds D-028 to D-034 | 2026-11-03 | answered, accepted |
 | P-004 | P-004-F-03-renderer.md | F-03 | Renderer, theme, base world, fixtures, public route; adds D-035 to D-042 | 2026-11-03 | answered, accepted |
+| P-005 | P-005-F-04-worlds.md | F-04 | Editorial and Terminal worlds, shells, navigation, two new fixtures; adds D-043 to D-051 | 2026-11-03 | answered, partly met (see P-005b) |
+| P-005b | P-005b-F-04-fixes.md | F-04 | Missing fixtures, screenshot location, light stress theme, anchor offset, acceptance audit | 2026-11-03 | answered, pending owner visual check |
+| P-006 | P-006-F-01-auth.md | F-01 | Accounts, database, RLS, real data source; adds D-052 to D-060; moves F-01 before F-05 | 2026-11-03 | ready to send |
 
 ## Feature checklist
 
 | Feature | Name | Prompt(s) | Implemented | Verified |
 | --- | --- | --- | --- | --- |
-| F-01 | Sign up, log in, log out | | | |
+| F-01 | Sign up, log in, log out | P-006 | | |
 | F-02 | Design file schema + validation | P-003 | yes (44 tests) | pending owner check |
 | F-03 | Renderer: design file to public page | P-004 | yes (106 tests total) | pending owner check |
-| F-04 | Design worlds: Editorial, Terminal | | | |
+| F-04 | Design worlds: Editorial, Terminal | P-005, P-005b | yes (153 tests) | pending owner visual check |
 | F-05 | Content sections and editing | | | |
 | F-06 | Visual builder | | | |
 | F-07 | Publish to personal link | | | |
