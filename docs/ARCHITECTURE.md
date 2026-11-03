@@ -106,12 +106,14 @@ flowchart LR
 
 ## Proposed folder structure
 
-A proposal only. Nothing below is created yet.
+Part built. `src/schema/` and `src/render/` exist; the rest is still a proposal.
 
 ```
 src/
   app/
-    (public)/u/[username]/page.tsx    public portfolio
+    u/[username]/page.tsx             public portfolio route, metadata
+    u/[username]/portfolio-content.tsx  route body, loaded behind the route's data access
+    not-found.tsx                     the standard 404 page
     (public)/search/page.tsx          search
     (auth)/login/                     log in
     (auth)/signup/                    sign up
@@ -125,13 +127,22 @@ src/
     index.ts                          exports and the validate* helpers
     fixtures/                         valid and invalid example data
     __tests__/                        Vitest tests, named by acceptance criterion
+  render/
+    Portfolio.tsx                     profile + design + content to markup (D-037)
+    theme.tsx                         design theme to CSS variables (D-042)
+    fonts.ts                          the six fonts through next/font (D-028)
+    font-vars.ts                      font key to CSS variable, no next/font import
+    format.ts                         month formatting for dates
+    load.ts                           username normalising, loading and validating
+    types.ts                          PortfolioSource and SkillCatalog (D-036)
+    primitives/                       section, tag, card, timeline item, external link
+    worlds/registry.ts                world key to section components (D-037)
+    worlds/base/                      one neutral set of section components
+  data/
+    index.ts                          the implementations the app imports
+    fixtures/                         three demo portfolios and the skill catalog
   design/
     presets/                          default design per world
-  renderer/
-    Renderer.tsx                      design + content to markup
-    sections/                         shared section primitives
-    worlds/editorial/                 world-specific components
-    worlds/terminal/
   builder/
     controls/                         tokens, order, display styles
   lib/
@@ -142,8 +153,14 @@ supabase/
   migrations/                         tables, RLS policies, seed
 docs/
 prompts/
-```
 
+**Deviations recorded at F-03 (2026-11-03)**
+
+- `src/render/` instead of `src/renderer/`. The folder holds the renderer, its primitives, its worlds and the load helper, so the short name matches what it contains.
+- The route lives at `src/app/u/[username]/`, without the `(public)` route group. A group only earns its place when a second layout needs to differ; F-03 has one route and one layout.
+- `page.tsx` is a thin shell: it exports `generateMetadata` and renders `portfolio-content.tsx`, which does the loading and the markup. Next 16 with cache components prerenders the route shell, so the data access sits behind the route's own boundary.
+- `export const instant = false` on the route. Without it, `notFound()` fires after the shell has streamed, and an unknown username answers 200 with an empty body instead of the 404 page. Blocking the route keeps the 404 status honest; revisit when caching arrives.
+- Tests sit next to the code they cover (`src/render/__tests__/`, `src/data/__tests__/`, `src/__tests__/`), not in a single top-level folder.
 ## Security rules
 
 Written as rules code can be checked against, not as intentions.
@@ -173,8 +190,8 @@ Written as rules code can be checked against, not as intentions.
 | `src/schema/content.schema.ts` | The content document format and its validation |
 | `src/schema/profile.schema.ts` | Username, display name and headline, outside both documents |
 | `src/schema/constants.ts` | The closed enums and limits every schema imports |
-| `src/renderer/Renderer.tsx` | Design file to markup |
-| `src/design/presets/` | Default design per world |
+| `src/render/Portfolio.tsx` | Design file to markup |
+| `src/data/` | Which implementation of `PortfolioSource` and `SkillCatalog` the app uses |
 | `supabase/migrations/` | Tables, RLS policies, seed data |
 | `DECISIONS.md` | Why anything is the way it is |
 | `docs/FEATURES.md` | Scope and dependency order |
