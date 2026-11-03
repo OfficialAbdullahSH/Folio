@@ -22,6 +22,35 @@ Installed at F-02 (2026-11-03): Next.js 16.4.4, React 19.3.0, Zod 4.6.7, TypeScr
 - The builder changes both. The AI changes the design document only, so it can never overwrite the owner's text.
 - Consequence: a wrong-looking page is a schema problem, a renderer problem, or bad data — never a builder problem. That is what keeps four features from drifting apart in one week.
 
+## Worlds
+
+Two worlds, Editorial and Terminal, render the same design and content documents with different page structure, navigation and typographic treatment (F-04). Both are server components and read only the theme variables (D-043, D-047).
+
+| Piece | Contract |
+| --- | --- |
+| `worlds/types.ts` | `World = { Shell, sections }`. `Shell` receives the profile, the ordered `navigation` items and the section nodes; `sections` maps each of the six section ids to a renderer. |
+| `worlds/registry.ts` | Maps `editorial` and `terminal` to their worlds. The base world stays in the tree as a reference and is not registered (D-037, extended by D-043). |
+| `Portfolio.tsx` | Decides which sections render, builds the navigation from them in design order, and hands both to the shell. |
+| `editorial/` | Masthead shell (`data-nav="masthead"`), numbered index, magazine sections; own stylesheet. |
+| `terminal/` | Explorer sidebar and tab strip (`data-nav="sidebar"`), panes, prompt headings; own stylesheet. |
+
+**Color roles (D-044).** Every world uses the six roles the same way:
+
+| Role | Used for |
+| --- | --- |
+| `background` | the page |
+| `surface` | panels, cards, windows |
+| `text` | primary text |
+| `muted` | secondary text, labels, dates |
+| `accent` | links, markers, emphasis, focus ring |
+| `border` | rules, dividers, outlines |
+
+Tints come from `color-mix()` over these variables. No world source contains a color literal (D-042, AC-5).
+
+**Minimum bar (D-050).** A world is not done below this line: its own shell and navigation, numbered or prompt-style section headings, all six sections in every display style, the radius and color-role rules, Arabic-safe layout, and the accessibility rules. Polish — scroll and hover motion, the blinking cursor, drop caps and pull quotes, fine spacing — is cuttable first, in that order.
+
+**Navigation and decoration.** Navigation is a labelled `nav` of anchor links to the rendered non-hero sections in design order, after a skip link to `#main-content`; it works without JavaScript (D-049). Decoration is CSS pseudo-elements and counters, or `data-decor` elements with `aria-hidden="true"`, and never user text (D-045). Worlds use logical properties only (D-048).
+
 ## Data model
 
 Settled by D-019 to D-026. The table layout below is a proposal for F-02 and F-09; the decisions are what bind.
@@ -135,12 +164,15 @@ src/
     format.ts                         month formatting for dates
     load.ts                           username normalising, loading and validating
     types.ts                          PortfolioSource and SkillCatalog (D-036)
-    primitives/                       section, tag, card, timeline item, external link
-    worlds/registry.ts                world key to section components (D-037)
-    worlds/base/                      one neutral set of section components
+    primitives/                       section, tag, card, timeline item, link, paragraphs, image
+    worlds/registry.ts                world key to `{ Shell, sections }` (D-043)
+    worlds/types.ts                   world, shell and section contracts
+    worlds/base/                      one neutral set of section components, kept as a reference
+    worlds/editorial/                 Editorial shell, sections and stylesheet
+    worlds/terminal/                  Terminal shell, sections and stylesheet
   data/
     index.ts                          the implementations the app imports
-    fixtures/                         three demo portfolios and the skill catalog
+    fixtures/                         five demo portfolios and the skill catalog
   design/
     presets/                          default design per world
   builder/

@@ -1,11 +1,12 @@
 import { WORLDS } from "@/schema";
 
-import { baseWorld } from "./base";
-import type { WorldSections } from "./types";
+import { editorialWorld } from "./editorial";
+import { terminalWorld } from "./terminal";
+import type { World } from "./types";
 
 export type WorldKey = (typeof WORLDS)[number];
 
-export const worldRegistry: Record<WorldKey, WorldSections> = {
-  editorial: baseWorld,
-  terminal: baseWorld,
+export const worldRegistry: Record<WorldKey, World> = {
+  editorial: editorialWorld,
+  terminal: terminalWorld,
 };

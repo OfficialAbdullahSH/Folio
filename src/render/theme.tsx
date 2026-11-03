@@ -3,6 +3,8 @@ import type { CSSProperties, ReactNode } from "react";
 import type { DesignTheme } from "@/schema";
 
 import { FONT_CSS_VARIABLES } from "./font-vars";
+import type { WorldKey } from "./worlds/registry";
+
 
 export const RADIUS_SCALE = {
   none: "0",
@@ -27,13 +29,16 @@ export function themeVariables(theme: DesignTheme): Record<string, string> {
 
 export function ThemeScope({
   theme,
+  world,
   children,
 }: {
   theme: DesignTheme;
+  world: WorldKey;
   children: ReactNode;
 }) {
   return (
     <div
+      data-world={world}
       style={themeVariables(theme) as CSSProperties}
       className="min-h-screen bg-[var(--color-background)] text-[var(--color-text)] [font-family:var(--font-body)]"
     >

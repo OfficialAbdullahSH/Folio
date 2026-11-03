@@ -1,4 +1,10 @@
-export function Paragraphs({ text }: { text: string }) {
+export function Paragraphs({
+  text,
+  firstParagraphClassName,
+}: {
+  text: string;
+  firstParagraphClassName?: string;
+}) {
   const paragraphs = text
     .split(/\n\s*\n/)
     .map((paragraph) => paragraph.trim())
@@ -10,7 +16,9 @@ export function Paragraphs({ text }: { text: string }) {
         <p
           key={index}
           dir="auto"
-          className="mb-3 break-words leading-relaxed text-[var(--color-text)] last:mb-0"
+          className={`mb-3 break-words leading-relaxed text-[var(--color-text)] last:mb-0 ${
+            index === 0 ? (firstParagraphClassName ?? "") : ""
+          }`}
         >
           {paragraph}
         </p>

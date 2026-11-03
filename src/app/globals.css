@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "../render/worlds/editorial/editorial.css";
+@import "../render/worlds/terminal/terminal.css";
 
 :root {
   --background: #ffffff;

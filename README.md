@@ -2,7 +2,7 @@
 
 Folio is a no-code portfolio builder for students, new graduates, and beginners in programming and design. An owner describes the look they want, an AI produces a complete design, and a visual builder lets them adjust it before publishing at a personal link. Every portfolio is a pair of structured documents — one for the design, one for the content — turned into a page by a single renderer, and published portfolios are searchable by name and skill so recruiters and collaborators can find people. v1 is nine features (F-01 to F-09) delivered in one week.
 
-**Status:** scaffolded. The schema layer (F-02) and the renderer (F-03) are implemented and tested; three demo portfolios render at `/u/demo-editorial`, `/u/demo-terminal` and `/u/demo-minimal`.
+**Status:** scaffolded. The schema layer (F-02), the renderer (F-03) and both design worlds (F-04) are implemented and tested; five demo portfolios render at `/u/demo-editorial`, `/u/demo-terminal`, `/u/demo-minimal`, `/u/demo-compact` and `/u/demo-long`.
 
 ## Documentation
 
@@ -11,7 +11,7 @@ Folio is a no-code portfolio builder for students, new graduates, and beginners 
 | `docs/PRODUCT.md` | What Folio is, who it is for, v1 scope and success criteria |
 | `docs/FEATURES.md` | F-01 to F-09, dependencies, build order, cut order |
 | `docs/ARCHITECTURE.md` | Stack, design as data, data flows, folder proposal, security rules |
-| `DECISIONS.md` | Decision log, D-001 to D-034 |
+| `DECISIONS.md` | Decision log, D-001 to D-051 |
 | `prompts/` | Every prompt sent to the developer, one file per prompt (owner-maintained) |
 
 ## Running
@@ -19,7 +19,7 @@ Folio is a no-code portfolio builder for students, new graduates, and beginners 
 ```bash
 npm install
 npm run dev        # http://localhost:3000
-npm test            # Vitest, 106 tests
+npm test            # Vitest, 147 tests
 npm run typecheck   # next typegen + tsc --noEmit
 ```
 

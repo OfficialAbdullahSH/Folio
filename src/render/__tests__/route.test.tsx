@@ -42,7 +42,15 @@ describe("public portfolio route", () => {
   });
 
   it("AC-13 renders each demo page", async () => {
-    for (const username of ["demo-editorial", "demo-terminal", "demo-minimal"]) {
+    for (const username of [
+      "demo-editorial",
+      "demo-terminal",
+      "demo-minimal",
+      "demo-compact",
+      "demo-long",
+      "demo-editorial-bold",
+      "demo-terminal-light",
+    ]) {
       const element = await PortfolioContent(params(username));
       const html = renderToStaticMarkup(element);
 

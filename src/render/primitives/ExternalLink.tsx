@@ -3,9 +3,11 @@ import type { ReactNode } from "react";
 export function ExternalLink({
   href,
   children,
+  className,
 }: {
   href: string;
   children: ReactNode;
+  className?: string;
 }) {
   return (
     <a
@@ -13,7 +15,9 @@ export function ExternalLink({
       target="_blank"
       rel="noopener noreferrer"
       dir="auto"
-      className="break-words text-[var(--color-accent)] underline underline-offset-2"
+      className={`break-words text-[var(--color-accent)] underline underline-offset-2 ${
+        className ?? ""
+      }`}
     >
       {children}
     </a>

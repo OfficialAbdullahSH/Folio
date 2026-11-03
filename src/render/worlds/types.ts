@@ -13,4 +13,23 @@ export type SectionProps = {
 
 export type SectionRenderer = (props: SectionProps) => ReactNode;
 
+export type NavigationItem = {
+  id: SectionId;
+  label: string;
+  index: number;
+};
+
+export type ShellProps = {
+  profile: Profile;
+  navigation: readonly NavigationItem[];
+  children: ReactNode;
+};
+
+export type Shell = (props: ShellProps) => ReactNode;
+
+export type World = {
+  Shell: Shell;
+  sections: Record<SectionId, SectionRenderer>;
+};
+
 export type WorldSections = Record<SectionId, SectionRenderer>;

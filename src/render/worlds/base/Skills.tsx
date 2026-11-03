@@ -27,7 +27,7 @@ export function Skills({ section, content, skills }: SectionProps) {
 
   return (
     <Section id="skills" title="Skills" style="list">
-      <ul className="list-disc space-y-1 pl-5">
+      <ul className="list-disc space-y-1 ps-5">
         {slugs.map((slug) => (
           <li key={slug} dir="auto" className="break-words">
             {skills[slug] ?? slug}

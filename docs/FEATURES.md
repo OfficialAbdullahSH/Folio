@@ -77,8 +77,44 @@ Tiers: **1** = required for a complete product (F-01 to F-07). **2** = simplifia
 - **Purpose:** two visually distinct worlds rendered from the same schema.
 - **Depends on:** F-02, F-03.
 - **Blocks:** F-06 (world-specific controls).
-- **Tier:** 1. **Status:** not started.
+- **Tier:** 1. **Status:** done (2026-11-03, P-005; corrected by P-005b). Decisions D-043 to D-051.
 - **Definition of done:** both worlds render every section and every display style (D-027).
+
+**Acceptance criteria (P-005 numbering, audited against the test suite in P-005b)**
+
+| AC | Requirement | Proof | Status |
+| --- | --- | --- | --- |
+| AC-1 | `editorial` and `terminal` each register a world with a shell and all six sections; no `base` key. | `AC-1 maps only the two worlds and provides a shell and six sections each`, `AC-1 renders a different page frame for each world` | Met |
+| AC-2 | Each world provides a shell and all six sections; every section and display style renders with the right `data-world`, `data-section` and `data-style`. | `AC-2 marks the page with the world the design chose`, 18 × `AC-4 renders <section> with <style> in the <world> world`, `AC-4 leaves about and contact without a display style` | Met |
+| AC-3 | The same design renders structurally different markup in each world: the frame, every section and every display style. | `AC-1 renders a different page frame for each world`, `AC-3 gives every section different markup in each world`, `AC-3 gives every display style its own markup inside a world` | Met |
+| AC-4 | Navigation lists rendered non-hero sections in design order, skips hidden and empty sections, anchors match ids and work without JavaScript, the skip link is first, and every anchor target clears the sticky chrome. | six `AC-4 ...` tests, `AC-15 makes the skip link the first focusable element`, `AC-4 gives every anchor target a scroll-margin-top` | Met |
+| AC-5 | Every color comes from the six theme variables; no color literal in `src/render/`. | `AC-5 uses no hard-coded color values` | Met |
+| AC-6 | Radius follows `var(--radius)`; no fixed values. | `AC-6 uses no fixed radius values` | Met |
+| AC-7 | Headings use the heading font token, body the body token; Terminal chrome uses the mono face. | `AC-7 keeps headings and body on the theme font variables` | Met |
+| AC-8 | Decoration is CSS-generated or `data-decor` with `aria-hidden`, never user text. | `AC-14 hides decorative elements from assistive technology` proves the `aria-hidden` clause; the no-user-text clause has no automated test | Partial |
+| AC-9 | No physical left/right rules; Arabic lays out correctly. | `AC-9 uses no physical left or right utilities`, `AC-9 uses no physical left or right declarations`, `AC-9 renders the Arabic fixture in both worlds` | Met |
+| AC-10 | Motion is CSS-only, no `"use client"`, no animation library, reduced motion honoured. | `AC-10 disables motion under prefers-reduced-motion`, `AC-16 keeps both worlds server rendered` | Met |
+| AC-11 | Both worlds and every section render in the browser at 1280 and 375. | Browser check: 26 full-page captures, `scrollWidth === clientWidth` at both widths; no jsdom-only claim | Met (browser) |
+| AC-12 | Every section and style renders under six stress themes without error. | `AC-12 renders every style in both worlds under six stress themes`, `AC-12 uses the light, dark, saturated, pastel, warm and monochrome themes` | Met |
+| AC-13 | Twenty-six screenshots exist: seven fixtures at 1280 and 375, plus the two main fixtures under six stress themes. | `docs/screenshots/f04/` (14 fixture + 12 stress captures); `docs/screenshots/f04/README.md` lists fixture, world, theme and width for each | Met (artifact) |
+| AC-14 | One `h1`, an `h2` per rendered section, labelled nav, header and main landmarks, alt text, focus styles. | the seven `AC-14 ...` tests and `AC-16 gives every image alt text` | Met |
+| AC-15 | The two new fixtures (`demo-editorial-bold`, `demo-terminal-light`) pass the F-02 validators and load; the five earlier demos render as before. | `all seven fixtures pass the F-02 validators`, `demo-editorial-bold matches the P-005 fixture spec`, `demo-terminal-light matches the P-005 fixture spec`, `keeps the five earlier demos on their original worlds`, `AC-13 renders each demo page` | Met |
+| AC-16 | Schema untouched; `typecheck`, `lint`, `test` and `build` pass. | Command run: `npm run typecheck`, `npm run lint`, `npm test` (153 tests), `npm run build`; `git diff src/schema` is empty | Met (command) |
+| AC-17 | `ARCHITECTURE.md` describes the world structure and folder; this file carries the F-04 table and status. | This section and `docs/ARCHITECTURE.md` § Worlds | Met (docs) |
+
+**P-005b audit note.** The earlier table used a different AC numbering, so several rows named the wrong criterion or overstated their proof. Corrections:
+
+- AC-1 had no test for the registry mapping; added `AC-1 maps only the two worlds and provides a shell and six sections each`.
+- AC-2's row now cites the 18 parameterised style tests, which were named under the earlier numbering as `AC-4 renders ...`; the names are unchanged, the criterion is correct here.
+- AC-4 now cites the stylesheet scan `AC-4 gives every anchor target a scroll-margin-top` and the skip-link test.
+- AC-8 was overstated: the cited test proves `aria-hidden` but not "never user text". The row is marked Partial and the gap is stated.
+- AC-11 was a Chrome check presented like a test; it is now labelled a browser check, and the count is 26, not 22.
+- AC-12 now names the six themes after the cold navy theme was replaced by the plain light theme in P-005b item 3.
+- AC-13 was the wrong criterion (it described the fixture set) and cited `all five fixtures pass the F-02 validators`, a test name that does not exist. It is now the screenshot criterion. It had only the 22 P-005 captures, not the 26 this audit requires; it is met after item 2: 26 captures in `docs/screenshots/f04/`.
+- AC-15 was the wrong criterion (it described the skip link) and claimed "all five demo pages". It is now the new-fixtures criterion. The two fixtures were present in the working tree but unpinned by tests; it is met after item 1: the two fixture-spec tests, the seven-fixture validator test and the seven-page render test.
+- AC-16's test count is now 153, up from 147.
+
+**Files:** `src/render/worlds/` (`types.ts`, `registry.ts`, `labels.ts`, `editorial/`, `terminal/`, and `base/` kept as a reference), `src/render/sections.ts`, `src/render/Portfolio.tsx`, `src/render/theme.tsx`, `src/render/primitives/` (`Paragraphs`, `ExternalLink`, `ProjectImage`), `src/app/globals.css`, `src/data/fixtures/portfolios.ts`, `docs/screenshots/f04/`.
 
 ## F-05 — Content sections and editing
 
