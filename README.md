@@ -34,7 +34,7 @@ The app runs without these steps, but signup and login need a Supabase project.
 1. Create a project at [supabase.com](https://supabase.com).
 2. In **SQL Editor**, run `supabase/migrations/0001_init.sql` once, top to bottom. It creates `profiles`, `portfolios`, `published_portfolios`, the profile trigger, the `is_username_available` function and every RLS policy.
 3. In **Authentication → Sign In / Providers → Email**, turn **Confirm email** off (D-005). Without this a new account has no session and the signup form says it could not sign you in.
-4. Copy `.env.example` to `.env.local` and fill in the project URL and the anon key from **Project Settings → API**. `.env.local` is gitignored; never put the service-role key there.
+4. Copy `.env.example` to `.env.local` and fill in the project URL and the publishable key from **Project Settings → API**. The legacy anon key name, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, is also accepted (D-060). `.env.local` is gitignored; never put the service-role key there.
 5. Restart `npm run dev`, then sign up at `/signup`. The dashboard is at `/dashboard`.
 
 To prove the policies hold, run the checks in `supabase/tests/rls-checklist.md`. They need two accounts created through `/signup`.

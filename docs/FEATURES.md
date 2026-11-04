@@ -9,7 +9,7 @@ Tiers: **1** = required for a complete product (F-01 to F-07). **2** = simplifia
 - **Purpose:** give each owner an account that owns exactly one portfolio.
 - **Depends on:** nothing (Supabase Auth).
 - **Blocks:** F-06 (saving edits), F-07 (ownership of a link), F-08 (per-user limits).
-- **Tier:** 1. **Status:** done (2026-11-03, P-006), pending a live check against a Supabase project. Decisions D-052 to D-059.
+- **Tier:** 1. **Status:** done (2026-11-03, P-006), pending a live check against a Supabase project. Decisions D-052 to D-060.
 
 **Acceptance criteria (P-006 numbering)**
 
@@ -24,9 +24,9 @@ Tiers: **1** = required for a complete product (F-01 to F-07). **2** = simplifia
 | AC-7 | The first dashboard load creates exactly one draft `portfolios` row with the defaults; a second load does not create another. | `AC-7 builds a row from the defaults`, `AC-7 writes to portfolios with on-conflict do-nothing`, `AC-7 two simultaneous first loads leave exactly one row`, `AC-7 reports a write failure without throwing` | Met (unit), live check pending |
 | AC-8 | The default design and the empty content pass the F-02 validators; the default world is `editorial` with all six sections. | five `AC-8 ...` tests | Met |
 | AC-9 | RLS: anonymous reads no `profiles` or `portfolios`; user A cannot read, change or delete user B's rows; anonymous reads `published_portfolios`; user A cannot publish under user B's id. | `supabase/tests/rls-checklist.md`, 18 checks | **Written, not run** — no Supabase project in this environment |
-| AC-10 | Only the URL and the anon key are used; `.env.local` is gitignored and `.env.example` holds placeholders. | four `AC-10 ...` tests in `src/__tests__/auth-config.test.ts` | Met |
+| AC-10 | Only the URL and the public key are used, under either the publishable or the legacy anon key name; `.env.local` is gitignored and `.env.example` holds placeholders. | four `AC-10 ...` tests in `src/__tests__/auth-config.test.ts`, nine tests in `src/lib/supabase/__tests__/config.test.ts` | Met |
 | AC-11 | The demo pages still render from fixtures; the public route does not read the database. | `AC-11 the public route still reads the fixture source, not the database`, the existing `AC-13 renders each demo page` | Met |
-| AC-12 | `npm run typecheck`, `npm run lint`, `npm test` and `npm run build` pass. | Commands run: 199 tests, build clean | Met (command) |
+| AC-12 | `npm run typecheck`, `npm run lint`, `npm test` and `npm run build` pass. | Commands run: 208 tests, build clean | Met (command) |
 
 **F-01 live check.** The unit tests cover the logic with fakes. The parts that need a real Supabase project — the trigger, the policies, the availability function and a full signup through the form — are written down in `supabase/tests/rls-checklist.md` and in the README setup steps, and are not yet executed.
 

@@ -208,7 +208,7 @@ src/
     defaults.ts                       the default design and the empty content (D-057)
     draft.ts                          creating the draft row once (D-054)
   lib/
-    supabase/config.ts                the two public environment values (D-055)
+    supabase/config.ts                the two public environment values (D-055, D-060)
     supabase/server.ts                server client over cookies
     supabase/client.ts                browser client
     supabase/proxy.ts                 updateSession, used by src/proxy.ts
@@ -244,6 +244,7 @@ prompts/
 - The auth logic sits behind the `AuthPorts` interface, so signup, login and logout are tested with fakes and no network. `actions.ts` is the only file that touches Next and Supabase.
 - `src/portfolio/` rather than `src/design/presets/`: the defaults are the content of a draft row, not a design preset, and the draft code owns them.
 - The username pre-check needed a SQL function (D-059) because RLS closes `profiles` to anonymous visitors, which is exactly the audience of the signup form.
+- The key variable is read as `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` with `NEXT_PUBLIC_SUPABASE_ANON_KEY` as a fallback, so a project set up either way works (D-060). Only emptiness is checked, and the error names the missing variable without printing its value.
 
 ## Security rules
 

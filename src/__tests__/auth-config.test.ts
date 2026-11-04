@@ -22,7 +22,9 @@ describe("secrets", () => {
     const example = readFileSync(join(ROOT, ".env.example"), "utf8");
 
     expect(example).toContain("NEXT_PUBLIC_SUPABASE_URL=");
-    expect(example).toContain("NEXT_PUBLIC_SUPABASE_ANON_KEY=");
+    expect(example).toContain("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=");
+    expect(example).toContain("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+    expect(example).not.toMatch(/^NEXT_PUBLIC_SUPABASE_ANON_KEY=/m);
     expect(example).not.toMatch(/eyJ[A-Za-z0-9_-]{10,}/);
     expect(example).not.toContain("SERVICE_ROLE");
   });
@@ -42,10 +44,11 @@ describe("secrets", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("AC-10 only the two public variables are read", () => {
+  it("AC-10 reads only the public variables, under both key names", () => {
     const config = readFileSync(join(ROOT, "src", "lib", "supabase", "config.ts"), "utf8");
 
     expect(config).toContain("NEXT_PUBLIC_SUPABASE_URL");
+    expect(config).toContain("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY");
     expect(config).toContain("NEXT_PUBLIC_SUPABASE_ANON_KEY");
     expect(config).not.toContain("SUPABASE_SECRET");
   });

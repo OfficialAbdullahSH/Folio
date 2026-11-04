@@ -12,5 +12,5 @@ export const AUTH_MESSAGES = {
     "Your account was created, but its profile is missing. Please contact support.",
   unexpected: "Something went wrong. Please try again.",
   notConfigured:
-    "Folio is not connected to Supabase yet. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local.",
+    "Folio is not connected to Supabase yet. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY to .env.local.",
 } as const;

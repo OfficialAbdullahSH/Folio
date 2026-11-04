@@ -17,7 +17,7 @@ Every prompt sent to DevAI is saved as its own file in this folder: `P-XXX-short
 
 | Feature | Name | Prompt(s) | Implemented | Verified |
 | --- | --- | --- | --- | --- |
-| F-01 | Sign up, log in, log out | P-006 | yes (199 tests total) | pending live Supabase check |
+| F-01 | Sign up, log in, log out | P-006 | yes (208 tests total) | pending live Supabase check |
 | F-02 | Design file schema + validation | P-003 | yes (44 tests) | pending owner check |
 | F-03 | Renderer: design file to public page | P-004 | yes (106 tests total) | pending owner check |
 | F-04 | Design worlds: Editorial, Terminal | P-005, P-005b | yes (153 tests) | pending owner visual check |
