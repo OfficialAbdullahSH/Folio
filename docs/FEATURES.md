@@ -1,6 +1,6 @@
 # Features
 
-Every feature is **not started**. Acceptance criteria arrive with each feature prompt and are pasted into this file by the owner.
+Each feature's status sits in its own section. Acceptance criteria arrive with each feature prompt and are recorded there by the owner.
 
 Tiers: **1** = required for a complete product (F-01 to F-07). **2** = simplifiable if time runs short (F-08, F-09).
 
@@ -9,7 +9,28 @@ Tiers: **1** = required for a complete product (F-01 to F-07). **2** = simplifia
 - **Purpose:** give each owner an account that owns exactly one portfolio.
 - **Depends on:** nothing (Supabase Auth).
 - **Blocks:** F-06 (saving edits), F-07 (ownership of a link), F-08 (per-user limits).
-- **Tier:** 1. **Status:** not started.
+- **Tier:** 1. **Status:** done (2026-11-03, P-006), pending a live check against a Supabase project. Decisions D-052 to D-059.
+
+**Acceptance criteria (P-006 numbering)**
+
+| AC | Requirement | Proof | Status |
+| --- | --- | --- | --- |
+| AC-1 | Signup with a valid email, password, username and display name creates the account, the `profiles` row and a session, then lands on the dashboard. | `AC-1 creates the account, signs in and writes the profile metadata`, `AC-1 signs the user in when the project still requires email confirmation`; browser check: the signup form posts and the action runs | Met (unit), live check pending |
+| AC-2 | A taken username, compared case-insensitively, is refused with a friendly message both through the pre-check and when the unique index rejects a race. | `AC-2 refuses a taken username before creating an account`, `AC-2 gives the loser of a race the same friendly message` | Met (unit), needs `is_username_available` in a live project |
+| AC-3 | Invalid input is rejected with a message beside the field: username format, reserved names, password 8–72, whitespace-only display name, malformed email. | eight `AC-3 ...` signup tests and eight `AC-3 ...` validation tests | Met |
+| AC-4 | Login works; a wrong password and an unknown email give the same message. | five `AC-4 ...` login tests | Met |
+| AC-5 | Logout ends the session; the dashboard is then unreachable. | `AC-5 ends the session exactly once`; browser check: `/dashboard` answers 307 to `/login` without a session | Met |
+| AC-6 | Route protection on the server: anonymous on `/dashboard` goes to `/login`, signed in on `/login` or `/signup` goes to `/dashboard`. | five `AC-6 ...` redirect tests, `src/proxy.ts`, and the `getCurrentUser` check in each page | Met |
+| AC-7 | The first dashboard load creates exactly one draft `portfolios` row with the defaults; a second load does not create another. | `AC-7 builds a row from the defaults`, `AC-7 writes to portfolios with on-conflict do-nothing`, `AC-7 two simultaneous first loads leave exactly one row`, `AC-7 reports a write failure without throwing` | Met (unit), live check pending |
+| AC-8 | The default design and the empty content pass the F-02 validators; the default world is `editorial` with all six sections. | five `AC-8 ...` tests | Met |
+| AC-9 | RLS: anonymous reads no `profiles` or `portfolios`; user A cannot read, change or delete user B's rows; anonymous reads `published_portfolios`; user A cannot publish under user B's id. | `supabase/tests/rls-checklist.md`, 18 checks | **Written, not run** — no Supabase project in this environment |
+| AC-10 | Only the URL and the anon key are used; `.env.local` is gitignored and `.env.example` holds placeholders. | four `AC-10 ...` tests in `src/__tests__/auth-config.test.ts` | Met |
+| AC-11 | The demo pages still render from fixtures; the public route does not read the database. | `AC-11 the public route still reads the fixture source, not the database`, the existing `AC-13 renders each demo page` | Met |
+| AC-12 | `npm run typecheck`, `npm run lint`, `npm test` and `npm run build` pass. | Commands run: 199 tests, build clean | Met (command) |
+
+**F-01 live check.** The unit tests cover the logic with fakes. The parts that need a real Supabase project — the trigger, the policies, the availability function and a full signup through the form — are written down in `supabase/tests/rls-checklist.md` and in the README setup steps, and are not yet executed.
+
+**Files:** `supabase/migrations/0001_init.sql`, `supabase/tests/rls-checklist.md`, `src/proxy.ts`, `src/app/(auth)/`, `src/app/dashboard/`, `src/app/page.tsx`, `src/lib/supabase/`, `src/lib/auth/`, `src/portfolio/`, `.env.example`.
 
 ## F-02 — Design file format and validation
 
@@ -153,9 +174,9 @@ Tiers: **1** = required for a complete product (F-01 to F-07). **2** = simplifia
 
 ## Build order
 
-D-004: **F-02 → F-03 → F-04 → F-05 → F-01 → F-06 → F-07 → F-08 → F-09.**
+D-052, amending D-004: **F-02 → F-03 → F-04 → F-01 → F-05 → F-06 → F-07 → F-08 → F-09.**
 
-Until F-01 lands, use fixture data: the schema, renderer, worlds and sections are all verifiable without an account.
+F-01 moved ahead of F-05 because content editing needs a real place to save. Until F-01 landed the schema, renderer and worlds were verified against fixture data; F-02, F-03, F-04 and F-01 are now done.
 
 F-01 to F-07 without F-09 is a complete page builder but not yet a platform. It is the fallback, not the goal.
 

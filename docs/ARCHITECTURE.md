@@ -13,7 +13,7 @@
 | AI | One LLM behind one interface (D-013, provider open) | Structured output mapped onto the design document; the provider stays swappable. |
 | Hosting | Vercel | Matches Next.js, no configuration. |
 
-Installed at F-02 (2026-11-03): Next.js 16.4.4, React 19.3.0, Zod 4.6.7, TypeScript 5.x, Vitest 5.1.0, Tailwind CSS 4, Node 24.
+Installed at F-02 (2026-11-03): Next.js 16.4.4, React 19.3.0, Zod 4.6.7, TypeScript 5.x, Vitest 5.1.0, Tailwind CSS 4, Node 24. Added at F-01 (2026-11-03): `@supabase/supabase-js` 2.118.0 and `@supabase/ssr` 0.12.7.
 
 ## Design as data
 
@@ -53,15 +53,20 @@ Tints come from `color-mix()` over these variables. No world source contains a c
 
 ## Data model
 
-Settled by D-019 to D-026. The table layout below is a proposal for F-02 and F-09; the decisions are what bind.
+Settled by D-019 to D-026 and D-053. Three tables exist after F-01; the two search tables arrive with F-09.
 
-| Table | Holds | From |
+| Table | Holds | Policy |
 | --- | --- | --- |
-| `profiles` | one row per user: `username` (unique, reserved list blocked), `display_name`, `headline` | D-006, D-022 |
-| `portfolios` | `id`, `owner_id`, `design` (JSONB, the design document), `content` (JSONB, the content document), publish state | D-007, D-019 |
-| `skills` | `id`, canonical `name`, `aliases` | D-026 |
-| `portfolio_skills` | `portfolio_id`, `skill_id` — the join search and autocomplete read | D-010, D-026 |
+| `profiles` | one row per user: `id` (= the auth user), `username`, `display_name`, `headline` | owner reads and updates their own row; anonymous has no access |
+| `portfolios` | the owner's private draft: `user_id` (primary key, one per user), `design` (JSONB), `content` (JSONB), `updated_at` | owner only, all four verbs |
+| `published_portfolios` | the public snapshot: `user_id`, `username`, `display_name`, `headline`, `design`, `content`, `published_at`, `updated_at` | anonymous and signed-in read every row; the owner writes only their own |
+| `skills` (F-09) | `id`, canonical `name`, `aliases` | proposed |
+| `portfolio_skills` (F-09) | `portfolio_id`, `skill_id` — the join search and autocomplete read | proposed |
 
+- A draft cannot leak because no policy exposes the tables that hold drafts; `published_portfolios` is the only public read path (D-053, S-1).
+- `username` is unique on `lower(username)` in both `profiles` and `published_portfolios`, and a check constraint enforces the D-032 format. The reserved list stays in the application (F-02 schema), not in SQL.
+- The `profiles` row is created by an `after insert` trigger on `auth.users`, from the signup metadata, inside the same transaction (D-054). The draft row is created by the app on the first dashboard load, with `ON CONFLICT DO NOTHING`.
+- Username availability for the signup form is answered by `public.is_username_available(text)` (D-059): `security definer`, empty `search_path`, execute granted to `anon` and `authenticated` only, returning a boolean.
 - **Design document:** `version: 1` (D-023), `world`, theme tokens, section order, display styles (D-020), and a font key from the curated enum (D-021). It contains no owner text.
 - **Content document:** the data of each section. It contains no design tokens.
 - The two are joined by portfolio id and are never merged (D-019).
@@ -69,7 +74,7 @@ Settled by D-019 to D-026. The table layout below is a proposal for F-02 and F-0
 - Skills are referenced by id, never by free text (D-026).
 - No `direction` field in v1; Arabic text still has to render correctly inside the normal layout (D-024).
 - Images live in Storage under the D-025 limits; the documents store the URL, validated as `http` or `https` (S-7).
-- Publish state, and the snapshot behind "reset to last published", belong to the F-07 spec, not to this document.
+- Publishing, and the snapshot behind "reset to last published", belong to the F-07 spec.
 
 ## Data flows
 
@@ -82,15 +87,15 @@ sequenceDiagram
     participant S as Supabase
     participant R as Renderer
     V->>N: GET /u/username
-    N->>S: select portfolio where published = true
-    S-->>N: design + content (JSON)
+    N->>S: select from published_portfolios where username = ...
+    S-->>N: profile, design and content (JSON)
     N->>N: parse with design.schema.ts and content.schema.ts
     N->>R: render(design, content)
     R-->>N: markup
     N-->>V: server-rendered page
 ```
 
-The select in step 2 runs on the server and is scoped to published rows (S-1).
+The select runs on the server against the public snapshot table, the only table anonymous can read (S-1). Until F-07 writes that table, the route still reads the fixture implementation of `PortfolioSource` (AC-11).
 
 ### (b) The owner edits in the builder
 
@@ -133,21 +138,47 @@ flowchart LR
     R --> P[/u/username]
 ```
 
-## Proposed folder structure
+### (e) An owner signs up, logs in and logs out
 
-Part built. `src/schema/` and `src/render/` exist; the rest is still a proposal.
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant A as Server Action
+    participant G as Supabase Auth
+    participant D as Postgres
+    B->>A: signup form (email, password, username, display name)
+    A->>A: F-02 profile schema and password rules
+    A->>D: is_username_available(username)
+    A->>G: signUp with the profile metadata
+    G->>D: insert auth.users
+    D->>D: trigger creates the profiles row
+    G-->>A: session (email confirmation is off, D-005)
+    A->>B: auth cookies, redirect to /dashboard
+```
+
+Every later request passes through `src/proxy.ts`, which refreshes the session with `getClaims()` and hands the new cookies to both the request and the response. Route protection then applies the AC-6 rules, and the pages check the user again on the server, so a bypassed proxy is not a bypassed guard.
+
+## Folder structure
+
+Built through F-01. F-05, F-06, F-08 and F-09 add the folders marked proposed.
 
 ```
 src/
+  proxy.ts                            session refresh and route protection (Next 16 name for middleware)
   app/
+    page.tsx                          landing page
+    layout.tsx                        root layout and metadata
+    not-found.tsx                     the standard 404 page
+    (auth)/layout.tsx                 plain chrome for the auth pages
+    (auth)/login/page.tsx             log in
+    (auth)/signup/page.tsx            sign up
+    (auth)/_components/               the two forms and the shared field
+    dashboard/page.tsx                the signed-in home; creates the draft on first visit
     u/[username]/page.tsx             public portfolio route, metadata
     u/[username]/portfolio-content.tsx  route body, loaded behind the route's data access
-    not-found.tsx                     the standard 404 page
-    (public)/search/page.tsx          search
-    (auth)/login/                     log in
-    (auth)/signup/                    sign up
-    editor/                           builder and content editing
-    api/ai/generate/route.ts          AI route handler
+    (public)/search/page.tsx          search (proposed)
+    editor/                           builder and content editing (proposed)
+    api/ai/generate/route.ts          AI route handler (proposed)
   schema/
     constants.ts                      enums and limits (D-028 to D-032)
     design.schema.ts                  design document, source of truth
@@ -172,19 +203,31 @@ src/
     worlds/terminal/                  Terminal shell, sections and stylesheet
   data/
     index.ts                          the implementations the app imports
-    fixtures/                         five demo portfolios and the skill catalog
-  design/
-    presets/                          default design per world
-  builder/
-    controls/                         tokens, order, display styles
+    fixtures/                         seven demo portfolios and the skill catalog
+  portfolio/
+    defaults.ts                       the default design and the empty content (D-057)
+    draft.ts                          creating the draft row once (D-054)
   lib/
-    supabase/server.ts                server client, scoped reads
-    supabase/client.ts                browser client, owner writes
-    search/                           query building, alias map
+    supabase/config.ts                the two public environment values (D-055)
+    supabase/server.ts                server client over cookies
+    supabase/client.ts                browser client
+    supabase/proxy.ts                 updateSession, used by src/proxy.ts
+    auth/validation.ts                signup and login schemas, built on the F-02 profile schema
+    auth/ports.ts                     the AuthPorts interface the logic depends on
+    auth/supabase-ports.ts            its Supabase implementation
+    auth/signup.ts, login.ts, logout.ts  the logic, testable with no network
+    auth/actions.ts                   the Server Actions the forms call
+    auth/session.ts                   getCurrentUser and getOwnProfile
+    auth/redirects.ts                 the AC-6 rules as a pure function
+    search/                           query building, alias map (proposed)
+  design/presets/                     default design per world (proposed)
+  builder/controls/                   tokens, order, display styles (proposed)
 supabase/
-  migrations/                         tables, RLS policies, seed
+  migrations/0001_init.sql            tables, trigger, availability function, RLS policies
+  tests/rls-checklist.md              the manual checks AC-9 requires
 docs/
 prompts/
+```
 
 **Deviations recorded at F-03 (2026-11-03)**
 
@@ -193,15 +236,25 @@ prompts/
 - `page.tsx` is a thin shell: it exports `generateMetadata` and renders `portfolio-content.tsx`, which does the loading and the markup. Next 16 with cache components prerenders the route shell, so the data access sits behind the route's own boundary.
 - `export const instant = false` on the route. Without it, `notFound()` fires after the shell has streamed, and an unknown username answers 200 with an empty body instead of the 404 page. Blocking the route keeps the 404 status honest; revisit when caching arrives.
 - Tests sit next to the code they cover (`src/render/__tests__/`, `src/data/__tests__/`, `src/__tests__/`), not in a single top-level folder.
+
+**Deviations recorded at F-01 (2026-11-03)**
+
+- `src/proxy.ts`, not `middleware.ts`. Next.js 16 renamed the file and the export; the Supabase SSR recipe for Next 16 uses `proxy` plus `getClaims()`.
+- `getCurrentUser()` calls `connection()`, and the three signed-in routes set `export const instant = false`. With cache components enabled, a route that only reads cookies when Supabase happens to be configured would be prerendered as a permanent "logged out" page.
+- The auth logic sits behind the `AuthPorts` interface, so signup, login and logout are tested with fakes and no network. `actions.ts` is the only file that touches Next and Supabase.
+- `src/portfolio/` rather than `src/design/presets/`: the defaults are the content of a draft row, not a design preset, and the draft code owns them.
+- The username pre-check needed a SQL function (D-059) because RLS closes `profiles` to anonymous visitors, which is exactly the audience of the signup form.
+
 ## Security rules
 
 Written as rules code can be checked against, not as intentions.
 
 **Draft privacy (D-011)**
 
-- S-1. Public page and search read only rows where `published = true`, through a server-side Supabase client.
-- S-2. No anon-key query from the browser reads a table that contains draft rows.
-- S-3. A test asserts that an unauthenticated request for an unpublished draft returns 404, and that an anon-key select on portfolios returns no draft rows.
+- S-1. The public read path is `published_portfolios` only, queried on the server. No public query reads `portfolios` or `profiles`.
+- S-2. No browser query reads a table that contains drafts. In F-01 the browser client is created but never used to read data.
+- S-3. `supabase/tests/rls-checklist.md` proves: anonymous reads nothing from `profiles` or `portfolios`; user A cannot read, change or delete user B's rows in any of the three tables; anonymous reads every `published_portfolios` row; user A cannot insert a published row owned by user B; and anonymous can call `is_username_available` without gaining access to `profiles`.
+- S-9. The service-role key is never used (D-055). A test fails if its name appears anywhere in `src/`.
 
 **AI (D-012)**
 
@@ -224,6 +277,11 @@ Written as rules code can be checked against, not as intentions.
 | `src/schema/constants.ts` | The closed enums and limits every schema imports |
 | `src/render/Portfolio.tsx` | Design file to markup |
 | `src/data/` | Which implementation of `PortfolioSource` and `SkillCatalog` the app uses |
-| `supabase/migrations/` | Tables, RLS policies, seed data |
+| `src/portfolio/defaults.ts` | What a brand-new draft contains (D-057) |
+| `src/lib/auth/` | The signup, login, logout and route-protection rules |
+| `src/lib/supabase/` | The two clients and the session refresh |
+| `src/proxy.ts` | Which requests are redirected, and the session refresh hook |
+| `supabase/migrations/` | Tables, the profile trigger, the availability function, RLS policies |
+| `supabase/tests/rls-checklist.md` | The manual proof that the policies hold |
 | `DECISIONS.md` | Why anything is the way it is |
 | `docs/FEATURES.md` | Scope and dependency order |
