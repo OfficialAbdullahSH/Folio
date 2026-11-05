@@ -26,18 +26,18 @@ export default async function LoginPage() {
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-2">
-        <Link href="/" className="text-sm text-stone-500 underline underline-offset-2">
+        <Link href="/" className="text-sm text-ink-soft underline underline-offset-2">
           Folio
         </Link>
-        <h1 className="text-2xl font-semibold text-stone-900">Log in</h1>
-        <p className="text-sm text-stone-600">
+        <h1 className="text-2xl font-semibold text-ink">Log in</h1>
+        <p className="text-sm text-ink-soft">
           Welcome back. Your draft is waiting where you left it.
         </p>
       </header>
 
       <LoginForm />
 
-      <p className="text-sm text-stone-600">
+      <p className="text-sm text-ink-soft">
         No account yet?{" "}
         <Link href="/signup" className="underline underline-offset-2">
           Sign up

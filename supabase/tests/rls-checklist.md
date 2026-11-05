@@ -86,3 +86,52 @@ delete from public.portfolios where user_id in ('<A_UUID>', '<B_UUID>');
   taking over a personal link.
 - Checks 14–18: the signup pre-check works for an anonymous visitor without opening `profiles` to
   anonymous reads (D-059).
+
+---
+
+# RLS checklist (F-05): skills and project images
+
+Run these after `supabase/migrations/0002_skills_and_storage.sql` and
+`supabase/seed/skills.sql`. Checks 19 to 26 are SQL and run in the SQL editor. Checks 27 to 30
+are done through the app, because the bucket's size and type limits are enforced by the Storage
+API, not by a database policy — a direct `insert into storage.objects` would not prove them.
+
+Same impersonation block as above:
+
+```sql
+begin;
+set local request.jwt.claims = '{"sub": "<A_UUID>", "role": "authenticated"}';
+set local role authenticated;          -- or: set local role anon;
+-- ... the statement being checked ...
+rollback;
+```
+
+## Checks
+
+| # | Case | How | Expected |
+| --- | --- | --- | --- |
+| 19 | Anonymous can read `skills` | `begin; set local role anon; select count(*) from public.skills; rollback;` | at least `80` |
+| 20 | Anonymous can read `skill_aliases` | `begin; set local role anon; select count(*) from public.skill_aliases; rollback;` | more than `0`, and `select * from public.skill_aliases where alias = 'reactjs';` returns `react` |
+| 21 | Anonymous cannot insert a skill | `begin; set local role anon; insert into public.skills (slug, name) values ('test-skill', 'Test'); rollback;` | `ERROR 42501: new row violates row-level security policy for table "skills"` |
+| 22 | An authenticated user cannot insert, update or delete a skill | same three statements under `set local role authenticated` with A's claims: `insert`, `update public.skills set name = 'x' where slug = 'react';`, `delete from public.skills where slug = 'react';` | all three: `ERROR 42501` (no policy grants the verb) |
+| 23 | Neither role can write an alias | same three statements against `public.skill_aliases` under both `anon` and `authenticated` | all six: `ERROR 42501` |
+| 24 | An alias cannot equal a skill slug | run as `postgres` (bypasses RLS): `insert into public.skill_aliases (alias, skill_slug) values ('react', 'react');` | `ERROR 23514: alias "react" is also a skill slug` |
+| 25 | A skill slug cannot equal an alias | run as `postgres`: `insert into public.skills (slug, name) values ('reactjs', 'ReactJS');` | `ERROR 23514: slug "reactjs" is also a skill alias` |
+| 26 | The bucket exists with the D-025 limits | `select id, public, file_size_limit, allowed_mime_types from storage.buckets where id = 'project-images';` | one row: `public = true`, `file_size_limit = 2097152`, types `image/jpeg, image/png, image/webp` |
+| 27 | A signed-in user can upload into their own folder | In the app, open `/dashboard/edit`, add a project, and upload a JPEG under 2 MB | the upload succeeds, the preview shows the image, and `select name from storage.objects where bucket_id = 'project-images' and name like '<A_UUID>/%';` returns the object |
+| 28 | A signed-in user cannot write into another user's folder | `begin; set local request.jwt.claims = '{"sub": "<A_UUID>", "role": "authenticated"}'; set local role authenticated; insert into storage.objects (bucket_id, name, owner) values ('project-images', '<B_UUID>/stolen.png', '<A_UUID>'); rollback;` | `ERROR 42501: new row violates row-level security policy for table "objects"` |
+| 29 | A signed-in user can write into their own folder | same block with `<A_UUID>/own.png` | `INSERT 0 1`; `rollback` removes the row again |
+| 30 | An anonymous user cannot write at all | `begin; set local role anon; insert into storage.objects (bucket_id, name) values ('project-images', '<A_UUID>/anon.png'); rollback;` | `ERROR 42501: new row violates row-level security policy for table "objects"` |
+| 31 | An upload over 2 MB, or of the wrong type, is refused | In the app, try a 3 MB JPEG and then a GIF | both refused with a clear message; a direct Storage API upload returns `Payload too large` / `mime type ... is not supported` |
+
+## What each check proves
+
+- Checks 19–20: the picker and the F-09 search can read the list without an account, which is the
+  only reason the tables are public (D-063).
+- Checks 21–23: the list is data, not a workspace. No client role can change it, so one user cannot
+  rename a skill for everybody.
+- Checks 24–25: an alias and a slug can never collide, so one word never resolves to two skills.
+- Check 26: the bucket limits from D-025 are real, not only checked in the browser.
+- Checks 27–30: a user writes only inside their own folder and anonymous cannot write at all.
+- Check 31: the size and type limits hold at the Storage API, which is the guard the browser
+  check only duplicates.

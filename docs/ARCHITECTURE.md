@@ -22,6 +22,23 @@ Installed at F-02 (2026-11-03): Next.js 16.4.4, React 19.3.0, Zod 4.6.7, TypeScr
 - The builder changes both. The AI changes the design document only, so it can never overwrite the owner's text.
 - Consequence: a wrong-looking page is a schema problem, a renderer problem, or bad data — never a builder problem. That is what keeps four features from drifting apart in one week.
 
+### The app chrome palette (D-071)
+
+The screens around a portfolio — landing, signup, login, dashboard, editor, preview — are not a
+world and do not read a portfolio's design document. They use one palette defined in
+`src/app/globals.css`: twelve semantic tokens (`canvas`, `panel`, `ink`, `ink-soft`, `rule`,
+`rule-strong`, `cta`, `cta-ink`, `danger`, `danger-surface`, `warn`, `warn-surface`), declared
+once for light and once under
+`prefers-color-scheme: dark`, and exposed as Tailwind utilities through `@theme inline`
+(`bg-canvas`, `text-ink`, `border-rule-strong`, ...). `color-scheme` follows the same media
+query so native controls match the theme.
+
+App code names no Tailwind palette class (`text-stone-900`) and no raw color value, because a
+literal cannot follow a theme: the chrome used to name `stone-*` while `globals.css` flipped the
+body to near-black in dark mode, which rendered 1.04:1 text. `src/__tests__/app-chrome-colors.test.ts`
+enforces the rule. A world is unaffected: `ThemeScope` still sets its own colors on the element
+that wraps the rendered page (D-042).
+
 ## Worlds
 
 Two worlds, Editorial and Terminal, render the same design and content documents with different page structure, navigation and typographic treatment (F-04). Both are server components and read only the theme variables (D-043, D-047).
@@ -53,15 +70,16 @@ Tints come from `color-mix()` over these variables. No world source contains a c
 
 ## Data model
 
-Settled by D-019 to D-026 and D-053. Three tables exist after F-01; the two search tables arrive with F-09.
+Settled by D-019 to D-026, D-053 and D-063. Three tables exist after F-01 and two more after F-05; the search join table arrives with F-09.
 
 | Table | Holds | Policy |
 | --- | --- | --- |
 | `profiles` | one row per user: `id` (= the auth user), `username`, `display_name`, `headline` | owner reads and updates their own row; anonymous has no access |
 | `portfolios` | the owner's private draft: `user_id` (primary key, one per user), `design` (JSONB), `content` (JSONB), `updated_at` | owner only, all four verbs |
 | `published_portfolios` | the public snapshot: `user_id`, `username`, `display_name`, `headline`, `design`, `content`, `published_at`, `updated_at` | anonymous and signed-in read every row; the owner writes only their own |
-| `skills` (F-09) | `id`, canonical `name`, `aliases` | proposed |
-| `portfolio_skills` (F-09) | `portfolio_id`, `skill_id` — the join search and autocomplete read | proposed |
+| `skills` | one row per canonical skill: `slug` (primary key), `name`. Loaded from `supabase/seed/skills.sql` (D-063) | everyone reads, signed in or not; no client role can write — there is no insert, update or delete policy |
+| `skill_aliases` | `alias` (primary key, lowercase), `skill_slug` (references `skills`, cascade delete). "ReactJS" and "react.js" both resolve to `react` (D-064) | same as `skills` |
+| `portfolio_skills` (F-09) | `portfolio_id`, `skill_slug` — the join search reads | proposed |
 
 - A draft cannot leak because no policy exposes the tables that hold drafts; `published_portfolios` is the only public read path (D-053, S-1).
 - `username` is unique on `lower(username)` in both `profiles` and `published_portfolios`, and a check constraint enforces the D-032 format. The reserved list stays in the application (F-02 schema), not in SQL.
@@ -71,10 +89,44 @@ Settled by D-019 to D-026 and D-053. Three tables exist after F-01; the two sear
 - **Content document:** the data of each section. It contains no design tokens.
 - The two are joined by portfolio id and are never merged (D-019).
 - Profile fields sit outside both documents and are indexed by search (D-022).
-- Skills are referenced by id, never by free text (D-026).
-- No `direction` field in v1; Arabic text still has to render correctly inside the normal layout (D-024).
-- Images live in Storage under the D-025 limits; the documents store the URL, validated as `http` or `https` (S-7).
-- Publishing, and the snapshot behind "reset to last published", belong to the F-07 spec.
+- Skills are referenced by slug, never by free text (D-026). The content document stores the slug; `skills` and `skill_aliases` are the only list, and a slug that is not in `skills` is refused at save time (D-033).
+- The skill tables are read-only to every client role. RLS is enabled with a select policy and nothing else, so insert, update and delete are refused; the seed runs in the SQL editor as the owner, which bypasses RLS (D-063). Two triggers keep the two tables apart: an alias may not equal a skill slug, and a slug may not equal an alias.
+- Images live in the public `project-images` bucket (D-065); the documents store the URL, validated as `http` or `https` at schema level (S-7) and against this project's bucket prefix at save time (D-066).
+
+**Storage: project images (F-05).** Created by `0002_skills_and_storage.sql` (D-065).
+
+| Piece | Setting |
+| --- | --- |
+| Bucket | `project-images`, public read, 2 MB limit, `image/jpeg`, `image/png`, `image/webp` (D-025) |
+| Object path | `<user_id>/<uuid>.<ext>`: the first folder is the owner's id, the name is a random UUID |
+| Write policies | insert, update and delete only where `(storage.foldername(name))[1] = auth.uid()::text`; anonymous has no write policy |
+| Read | no select policy: the bucket is public, so the stored URL works without one (D-039) |
+| Stored value | the public URL, checked at save time against this project's exact bucket prefix (D-066) |
+
+The browser checks type and size first only so the owner gets a fast, clear message; the bucket limits are the guard (S-8). Deleting a project leaves its image in place (D-070).
+
+## The editor (F-05)
+
+The content editor is the first interactive surface in the app, split so every rule is testable with no browser (D-068).
+
+| Piece | File | Contract |
+| --- | --- | --- |
+| Reducer | `src/editor/reducer.ts` | Pure `(state, action) => state`. Add, remove, move up and down, set field, current toggle, add and remove skill. Enforces the F-02 caps, ignores impossible moves, and never mutates the state it was given |
+| Save | `src/editor/save.ts` | `saveDraft(input, deps)`. Validates the whole content document and the profile, refuses a skill slug that is not in `skills` and an image URL outside the bucket prefix, then writes through two injected functions. Imports neither Next nor Supabase |
+| Server action | `src/editor/actions.ts` | `"use server"`. `saveContentAction(previous, formData)` reads the user, builds the dependencies from Supabase, calls `saveDraft` and maps the result to `SaveFormState`. The user id comes from the session, never from the form |
+| Shell | `src/editor/components/editor-shell.tsx` | Client component. `useReducer` for the document, `useActionState` for the save, one hidden `payload` input carrying `{ content, profile, revision }`, the error summary and the save status |
+| Skills | `src/editor/skills.ts` | `searchSkills` and `resolveSkill`. Filters the whole list in the browser by name and alias, ranks an exact alias first, and resolves an alias to its canonical slug (D-064) |
+| Images | `src/editor/image-url.ts` | `imageUrlPrefix`, `isProjectImageUrl`, `checkImageFile`, `newImagePath`. Pure string work, so the bucket rules are testable with no bucket |
+| Components | `src/editor/components/` | `field.tsx` (label, hint and error wiring), `section-card.tsx`, `project-list.tsx`, `experience-list.tsx`, `contact-list.tsx`, `skill-picker.tsx`, `month-year-select.tsx`, `item-actions.tsx`, `image-upload.tsx` |
+
+How a save works, in order:
+
+1. The shell keeps the document in the reducer and a `revision` counter that only the reducer changes. It is dirty when `revision` is greater than the revision the last successful save echoed back, so no comparison happens in an effect.
+2. Submitting posts the hidden payload. `actions.ts` refuses without a session, without a profile row and without the skills list, and says which one was missing.
+3. `saveDraft` validates, then writes `portfolios.content` and `profiles`. They are two statements, not one transaction, so a failure after the first is reported as exactly that rather than as a clean success.
+4. Field errors come back as schema paths. The shell turns each into `field-<path>`, so the message sits next to the input that caused it, and the summary at the top takes focus.
+
+**The preview route.** `src/app/dashboard/preview/page.tsx` reads the saved draft through `readDraftPortfolio` in `src/portfolio/draft.ts`, which answers `ok`, `missing`, `failed` or `invalid`. It then renders with the real `Portfolio` and the real skill names, so preview and the public page cannot drift apart (D-062). It never renders unsaved editor state: what it shows is what a save would have written. A draft that fails validation gets a readable message instead of a crash or a silent reset.
 
 ## Data flows
 
@@ -158,9 +210,48 @@ sequenceDiagram
 
 Every later request passes through `src/proxy.ts`, which refreshes the session with `getClaims()` and hands the new cookies to both the request and the response. Route protection then applies the AC-6 rules, and the pages check the user again on the server, so a bypassed proxy is not a bypassed guard.
 
+### (f) The owner edits content and saves
+
+```mermaid
+flowchart LR
+    A[Editor control] -->|action| B[Reducer: content document in memory]
+    B --> C[Dirty when revision is ahead]
+    B -->|Save| D[Hidden payload: content, profile, revision]
+    D --> E[Server Action: user from the session]
+    E --> F[saveDraft: Zod, skill slugs, image prefix]
+    F -->|invalid| G[Field errors by path, nothing written]
+    F -->|valid| H[(portfolios.content and profiles)]
+    H --> I[Saved revision echoed back, dirty cleared]
+```
+
+The browser never sends a user id. The action takes it from `getCurrentUser()`, so RLS and the action agree on whose row is written (S-10).
+
+### (g) The owner previews the saved draft
+
+```mermaid
+sequenceDiagram
+    participant O as Owner
+    participant N as /dashboard/preview
+    participant S as Supabase
+    participant R as Renderer
+    O->>N: GET /dashboard/preview
+    N->>N: getCurrentUser, then ensureDraftPortfolio
+    N->>S: select design, content from portfolios where user_id = ...
+    S-->>N: the saved draft
+    N->>N: validate design and content
+    alt invalid
+        N-->>O: readable message, nothing rendered
+    else valid
+        N->>S: select name from skills where slug in (...)
+        N->>R: render(design, content, skill names)
+        R-->>N: markup
+        N-->>O: the page as it would look
+    end
+```
+
 ## Folder structure
 
-Built through F-01. F-05, F-06, F-08 and F-09 add the folders marked proposed.
+Built through F-05. F-06, F-08 and F-09 add the folders marked proposed.
 
 ```
 src/
@@ -174,10 +265,12 @@ src/
     (auth)/signup/page.tsx            sign up
     (auth)/_components/               the two forms and the shared field
     dashboard/page.tsx                the signed-in home; creates the draft on first visit
+    dashboard/edit/page.tsx           the content editor (F-05); owner only
+    dashboard/preview/page.tsx        the saved draft through the real renderer (F-05); owner only
     u/[username]/page.tsx             public portfolio route, metadata
     u/[username]/portfolio-content.tsx  route body, loaded behind the route's data access
     (public)/search/page.tsx          search (proposed)
-    editor/                           builder and content editing (proposed)
+    dashboard/build/page.tsx          the visual builder (proposed, F-06)
     api/ai/generate/route.ts          AI route handler (proposed)
   schema/
     constants.ts                      enums and limits (D-028 to D-032)
@@ -206,7 +299,16 @@ src/
     fixtures/                         seven demo portfolios and the skill catalog
   portfolio/
     defaults.ts                       the default design and the empty content (D-057)
-    draft.ts                          creating the draft row once (D-054)
+    draft.ts                          creating the draft row once (D-054), and readDraftPortfolio (D-062)
+  editor/
+    reducer.ts                        every content edit, as a pure function (D-068)
+    save.ts                           validate, then write; no Next, no Supabase
+    actions.ts                        the Server Action the editor form posts
+    skills.ts                         search by name and alias, resolve an alias to its slug (D-064)
+    image-url.ts                      the bucket prefix, the URL rule, the file check, the object path
+    lib/                              shared class strings and the cn helper
+    components/                       the shell, the field, the section cards and the lists
+    __tests__/                        Vitest tests, named by acceptance criterion
   lib/
     supabase/config.ts                the two public environment values (D-055, D-060)
     supabase/server.ts                server client over cookies
@@ -224,10 +326,21 @@ src/
   builder/controls/                   tokens, order, display styles (proposed)
 supabase/
   migrations/0001_init.sql            tables, trigger, availability function, RLS policies
-  tests/rls-checklist.md              the manual checks AC-9 requires
+  migrations/0002_skills_and_storage.sql  skills, skill_aliases, the project-images bucket and its policies
+  seed/skills.sql                     the canonical skill list and its aliases, safe to re-run
+  tests/rls-checklist.md              the manual checks AC-9, AC-1 and AC-17 require
 docs/
 prompts/
 ```
+
+**Deviations recorded at F-05 (2026-11-05)**
+
+- `src/editor/` sits beside `src/portfolio/`, not inside it. The portfolio folder holds the draft row and its defaults, which the server owns; the editor is browser code with a reducer, and mixing the two would put client components next to the draft's data access.
+- The editor is client components, which D-047 allows because that decision restricts world components only (D-068). The save path is still a Server Action, so the browser never holds a Supabase write.
+- `readDraftPortfolio` was added to `src/portfolio/draft.ts` and validates both documents on the way out. A stored draft that no longer matches the schema is refused with a message rather than reset to defaults, because resetting would delete content the owner cannot get back.
+- The skills picker filters the whole list in the browser rather than querying per keystroke (D-064). The list is a few hundred rows and it is public, so the query would cost more than it saves.
+- The year select uses a fixed range, 1950 to 2100, instead of "this year + 1". Reading the clock during render is an unstable value the prerenderer rejects, and a fixed range costs nothing.
+- Both new pages cast the Supabase client to the draft reader interface (`supabase as unknown as DraftReader`). The structural type makes TypeScript recurse without bound (TS2589) on the generic client.
 
 **Deviations recorded at F-03 (2026-11-03)**
 
@@ -253,7 +366,7 @@ Written as rules code can be checked against, not as intentions.
 **Draft privacy (D-011)**
 
 - S-1. The public read path is `published_portfolios` only, queried on the server. No public query reads `portfolios` or `profiles`.
-- S-2. No browser query reads a table that contains drafts. In F-01 the browser client is created but never used to read data.
+- S-2. No browser query reads a table that contains drafts. The browser client is used only to upload an image to Storage (F-05); every table read and write goes through the server.
 - S-3. `supabase/tests/rls-checklist.md` proves: anonymous reads nothing from `profiles` or `portfolios`; user A cannot read, change or delete user B's rows in any of the three tables; anonymous reads every `published_portfolios` row; user A cannot insert a published row owned by user B; and anonymous can call `is_username_available` without gaining access to `profiles`.
 - S-9. The service-role key is never used (D-055). A test fails if its name appears anywhere in `src/`.
 
@@ -266,7 +379,11 @@ Written as rules code can be checked against, not as intentions.
 **Input (D-014)**
 
 - S-7. Every URL in either document is validated as `http` or `https` at schema level; `javascript:`, `data:` and other schemes are rejected there, not filtered at render time.
-- S-8. Image uploads over 2 MB, or outside JPEG, PNG and WebP, are rejected (D-025).
+- S-8. Image uploads over 2 MB, or outside JPEG, PNG and WebP, are rejected (D-025). The bucket limits enforce it; the browser check only gives the message sooner.
+- S-10. A save writes only the signed-in user's own rows. The user id comes from `getCurrentUser()`, never from the form payload, and RLS refuses anything else.
+- S-11. A project `imageUrl` is accepted only when it starts with this project's exact `project-images` prefix, so a look-alike host or a URL that merely contains the prefix is refused (D-066).
+- S-12. `skills` and `skill_aliases` are readable by everyone and writable by no client role: RLS is enabled with a select policy and no insert, update or delete policy (D-063). `rls-checklist.md` records the check.
+- S-13. Storage writes are limited to the owner's own folder: the insert, update and delete policies on `storage.objects` require `(storage.foldername(name))[1]` to equal `auth.uid()`, and anonymous has no write policy at all (D-065).
 
 ## Sources of truth
 
@@ -279,10 +396,16 @@ Written as rules code can be checked against, not as intentions.
 | `src/render/Portfolio.tsx` | Design file to markup |
 | `src/data/` | Which implementation of `PortfolioSource` and `SkillCatalog` the app uses |
 | `src/portfolio/defaults.ts` | What a brand-new draft contains (D-057) |
+| `src/portfolio/draft.ts` | Creating the draft row once, and reading it back for the preview (D-054, D-062) |
+| `src/editor/reducer.ts` | Which content edits exist, and the limits each one enforces |
+| `src/editor/save.ts` | What a save accepts, and what it writes |
+| `src/editor/skills.ts` | How a query becomes a skill, by name or by alias |
+| `src/editor/image-url.ts` | Which image URLs and files are accepted |
+| `supabase/seed/skills.sql` | The canonical skill list and its aliases (D-063) |
 | `src/lib/auth/` | The signup, login, logout and route-protection rules |
 | `src/lib/supabase/` | The two clients and the session refresh |
 | `src/proxy.ts` | Which requests are redirected, and the session refresh hook |
-| `supabase/migrations/` | Tables, the profile trigger, the availability function, RLS policies |
+| `supabase/migrations/` | Tables, the profile trigger, the availability function, RLS policies, the skill tables, the storage bucket |
 | `supabase/tests/rls-checklist.md` | The manual proof that the policies hold |
 | `DECISIONS.md` | Why anything is the way it is |
 | `docs/FEATURES.md` | Scope and dependency order |

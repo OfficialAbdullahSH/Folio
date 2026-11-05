@@ -25,17 +25,21 @@ npm run lint
 npm run build
 ```
 
-The app is a Next.js 16 App Router project. `src/schema/` holds the F-02 schemas, `src/render/` the F-03 renderer, `src/data/` the fixture implementation of `PortfolioSource` and `SkillCatalog` that F-07 replaces with the database, `src/lib/auth/` the F-01 auth logic, and `src/portfolio/` the defaults a new draft starts from.
+The app is a Next.js 16 App Router project. `src/schema/` holds the F-02 schemas, `src/render/` the F-03 renderer, `src/data/` the fixture implementation of `PortfolioSource` and `SkillCatalog` that F-07 replaces with the database, `src/lib/auth/` the F-01 auth logic, `src/portfolio/` the defaults a new draft starts from, and `src/editor/` the F-05 editor: its reducer, the save path and the components.
 
-## Supabase setup (F-01)
+## Supabase setup (F-01, F-05)
 
-The app runs without these steps, but signup and login need a Supabase project.
+The app runs without these steps, but signup, login and the editor need a Supabase project.
 
 1. Create a project at [supabase.com](https://supabase.com).
 2. In **SQL Editor**, run `supabase/migrations/0001_init.sql` once, top to bottom. It creates `profiles`, `portfolios`, `published_portfolios`, the profile trigger, the `is_username_available` function and every RLS policy.
-3. In **Authentication → Sign In / Providers → Email**, turn **Confirm email** off (D-005). Without this a new account has no session and the signup form says it could not sign you in.
-4. Copy `.env.example` to `.env.local` and fill in the project URL and the publishable key from **Project Settings → API**. The legacy anon key name, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, is also accepted (D-060). `.env.local` is gitignored; never put the service-role key there.
-5. Restart `npm run dev`, then sign up at `/signup`. The dashboard is at `/dashboard`.
+3. In the same **SQL Editor**, run `supabase/migrations/0002_skills_and_storage.sql` once. It creates `skills`, `skill_aliases`, the public `project-images` bucket with its size and type limits, and the policies that keep each user inside their own folder.
+4. In the same **SQL Editor**, run `supabase/seed/skills.sql`. It loads the canonical skill list and the aliases the picker resolves. Running it again updates the same rows instead of duplicating them.
+5. In **Authentication → Sign In / Providers → Email**, turn **Confirm email** off (D-005). Without this a new account has no session and the signup form says it could not sign you in.
+6. Copy `.env.example` to `.env.local` and fill in the project URL and the publishable key from **Project Settings → API**. The legacy anon key name, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, is also accepted (D-060). `.env.local` is gitignored; never put the service-role key there.
+7. Restart `npm run dev`, then sign up at `/signup`. The dashboard is at `/dashboard`, the editor at `/dashboard/edit`, and the draft preview at `/dashboard/preview`.
+
+Steps 3 and 4 are what the skills picker reads. Without them the editor still opens, the picker says the list is not loaded, and saving refuses rather than writing skill slugs that do not exist.
 
 To prove the policies hold, run the checks in `supabase/tests/rls-checklist.md`. They need two accounts created through `/signup`.
 
@@ -46,6 +50,8 @@ To prove the policies hold, run the checks in `supabase/tests/rls-checklist.md`.
 | `/` | landing page |
 | `/signup`, `/login` | account pages; a signed-in visitor is sent to the dashboard |
 | `/dashboard` | the signed-in home; creates the draft on first visit; anonymous visitors are sent to `/login` |
+| `/dashboard/edit` | the content editor (F-05); owner only |
+| `/dashboard/preview` | the saved draft rendered by the real renderer (F-05); owner only |
 | `/u/<username>` | public portfolio (F-03, fixture data until F-07) |
 
 ## Conventions

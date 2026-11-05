@@ -2,27 +2,75 @@
 @import "../render/worlds/editorial/editorial.css";
 @import "../render/worlds/terminal/terminal.css";
 
+/*
+ * The app chrome palette: everything that is not a rendered portfolio.
+ *
+ * Two complete palettes, light and dark, and nothing else. A screen names a role
+ * (`bg-canvas`, `text-ink`), never a scale step, so it cannot be readable in one
+ * theme and invisible in the other. A portfolio world sets its own colors inside
+ * `ThemeScope`; these tokens are what surrounds it.
+ *
+ * Roles: canvas is the page, panel is a surface sitting on it, ink is text,
+ * ink-soft is secondary text, rule is a divider, rule-strong is the boundary of a
+ * control (it has to clear 3:1), cta is the one filled action, danger is an error
+ * and warn is a setup problem the owner has to fix.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  color-scheme: light dark;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --app-canvas: #faf9f7;
+  --app-panel: #ffffff;
+  --app-ink: #1c1917;
+  --app-ink-soft: #57534e;
+  --app-rule: #e7e5e4;
+  --app-rule-strong: #78716c;
+  --app-cta: #1c1917;
+  --app-cta-ink: #faf9f7;
+  --app-danger: #b42318;
+  --app-danger-surface: #fef3f2;
+  --app-warn: #b54708;
+  --app-warn-surface: #fffaeb;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    color-scheme: dark;
+
+    --app-canvas: #131211;
+    --app-panel: #1c1a18;
+    --app-ink: #f4f2ef;
+    --app-ink-soft: #a8a29e;
+    --app-rule: rgba(255, 255, 255, 0.1);
+    --app-rule-strong: #8b857e;
+    --app-cta: #f4f2ef;
+    --app-cta-ink: #131211;
+    --app-danger: #f97066;
+    --app-danger-surface: #2a1512;
+    --app-warn: #fdb022;
+    --app-warn-surface: #2a1f0d;
   }
 }
 
+@theme inline {
+  --color-canvas: var(--app-canvas);
+  --color-panel: var(--app-panel);
+  --color-ink: var(--app-ink);
+  --color-ink-soft: var(--app-ink-soft);
+  --color-rule: var(--app-rule);
+  --color-rule-strong: var(--app-rule-strong);
+  --color-cta: var(--app-cta);
+  --color-cta-ink: var(--app-cta-ink);
+  --color-danger: var(--app-danger);
+  --color-danger-surface: var(--app-danger-surface);
+  --color-warn: var(--app-warn);
+  --color-warn-surface: var(--app-warn-surface);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--app-canvas);
+  color: var(--app-ink);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }

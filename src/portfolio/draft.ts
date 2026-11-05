@@ -1,4 +1,5 @@
-import type { ContentDocument, DesignDocument } from "@/schema";
+import { validateContent, validateDesign } from "@/schema";
+import type { ContentDocument, DesignDocument, ValidationIssue } from "@/schema";
 
 import { defaultDesign, emptyContent } from "./defaults";
 
@@ -53,4 +54,67 @@ export async function ensureDraftPortfolio(
   }
 
   return { ok: true };
+}
+
+export type DraftReader = {
+  from(table: "portfolios"): {
+    select(columns: "design, content"): {
+      eq(
+        column: "user_id",
+        value: string,
+      ): {
+        maybeSingle(): PromiseLike<{
+          data: { design: unknown; content: unknown } | null;
+          error: { message: string } | null;
+        }>;
+      };
+    };
+  };
+};
+
+export type DraftReadResult =
+  | { status: "ok"; design: DesignDocument; content: ContentDocument }
+  | { status: "missing" }
+  | { status: "failed"; message: string }
+  | { status: "invalid"; scope: "design" | "content"; errors: ValidationIssue[] };
+
+/**
+ * Reads the owner's draft back for the editor and the preview (D-057).
+ *
+ * The row is validated on the way out for the same reason the public page validates
+ * it: the editor must never load a document it cannot save again.
+ */
+export async function readDraftPortfolio(
+  reader: DraftReader,
+  userId: string,
+): Promise<DraftReadResult> {
+  const { data, error } = await reader
+    .from("portfolios")
+    .select("design, content")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error !== null) {
+    console.error("[folio] could not read the draft portfolio", error.message);
+
+    return { status: "failed", message: error.message };
+  }
+
+  if (data === null) {
+    return { status: "missing" };
+  }
+
+  const design = validateDesign(data.design);
+
+  if (!design.success) {
+    return { status: "invalid", scope: "design", errors: design.errors };
+  }
+
+  const content = validateContent(data.content);
+
+  if (!content.success) {
+    return { status: "invalid", scope: "content", errors: content.errors };
+  }
+
+  return { status: "ok", design: design.data, content: content.data };
 }
