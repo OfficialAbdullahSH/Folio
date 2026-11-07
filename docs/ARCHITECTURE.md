@@ -249,9 +249,51 @@ sequenceDiagram
     end
 ```
 
+### (h) The owner changes the design in the builder
+
+```mermaid
+flowchart LR
+    A[Builder control] -->|DesignAction| B[Reducer: design document in memory]
+    B -->|postMessage| C[Frame page in the iframe]
+    C -->|origin, parent and schema checks| D[Renderer: live preview]
+    B -->|Save| E[Server Action: user from the session]
+    E --> F[saveDesign: Zod]
+    F -->|invalid| G[Errors by path, nothing written]
+    F -->|valid| H[(portfolios.design)]
+    B -->|warning pairs| I[Readability panel: warn, never block]
+```
+
+The builder holds the whole design document in one reducer (`src/builder/reducer.ts`), the same shape the schema defines, so every control is a pure state change and every control is testable without a browser (D-068). Nothing is written until Save, and Save replaces `portfolios.design` only (D-072). A look is a named preset applied as one action (D-075); changing any single token afterwards leaves the state matching no look, which is how the gallery shows "custom".
+
+Readability is computed from the same document, in `src/builder/contrast.ts`, over the six pairs D-076 names. It produces warnings for the panel and nothing else: `save.ts` never reads them (D-009).
+
+### (i) The preview frame and its message protocol
+
+```mermaid
+sequenceDiagram
+    participant B as Builder page
+    participant F as /dashboard/preview/frame
+    participant R as Renderer
+    F->>F: getCurrentUser, read the saved draft
+    F-->>B: iframe is ready
+    B->>F: postMessage({ type: "folio:design", design })
+    F->>F: event.source is parent? event.origin is same origin?
+    F->>F: parse with design.schema.ts
+    alt rejected
+        F->>F: ignore, keep the last good design
+    else accepted
+        F->>R: render(design, saved content, saved profile)
+        R-->>F: markup
+    end
+```
+
+Three checks guard the message (D-073): the source must be the frame's own parent, the origin must be the frame's own origin, and the design inside must pass the F-02 validator. A message that fails any of them is ignored without touching what is already rendered, so a bad message cannot blank the preview or crash the frame.
+
+The frame page is a separate route rather than a component because media queries read the iframe's own viewport: a 375 px iframe is a 375 px viewport, so the worlds' real breakpoints fire (D-074). It renders `Portfolio` with the owner's **saved** content and profile, so the preview is always the real renderer over real data, and only the design comes over the wire.
+
 ## Folder structure
 
-Built through F-05. F-06, F-08 and F-09 add the folders marked proposed.
+Built through F-06. F-08 and F-09 add the folders marked proposed.
 
 ```
 src/
@@ -270,7 +312,8 @@ src/
     u/[username]/page.tsx             public portfolio route, metadata
     u/[username]/portfolio-content.tsx  route body, loaded behind the route's data access
     (public)/search/page.tsx          search (proposed)
-    dashboard/build/page.tsx          the visual builder (proposed, F-06)
+    dashboard/design/page.tsx          the visual builder (F-06); owner only
+    dashboard/preview/frame/page.tsx   the preview frame, driven by postMessage (F-06); owner only
     api/ai/generate/route.ts          AI route handler (proposed)
   schema/
     constants.ts                      enums and limits (D-028 to D-032)
@@ -322,8 +365,19 @@ src/
     auth/session.ts                   getCurrentUser and getOwnProfile
     auth/redirects.ts                 the AC-6 rules as a pure function
     search/                           query building, alias map (proposed)
-  design/presets/                     default design per world (proposed)
-  builder/controls/                   tokens, order, display styles (proposed)
+  builder/
+    reducer.ts                        every design edit, as a pure function (D-068)
+    looks.ts                          the named looks, as data (D-075)
+    contrast.ts                       WCAG contrast and the six readability pairs (D-076)
+    readability-copy.ts               a failing pair, said in words (AC-6)
+    hex.ts                            hex input parsing and normalising (D-077)
+    messages.ts                       the frame message type and its guards (D-073)
+    save.ts                           validate, then write; no Next, no Supabase
+    actions.ts                        the Server Actions: save and reset
+    labels.ts                         the names the controls show
+    components/                       the shell, color and type controls, the section list,
+                                      the readability panel, the frame and the dialog
+    __tests__/                        Vitest tests, named by acceptance criterion
 supabase/
   migrations/0001_init.sql            tables, trigger, availability function, RLS policies
   migrations/0002_skills_and_storage.sql  skills, skill_aliases, the project-images bucket and its policies
@@ -332,6 +386,14 @@ supabase/
 docs/
 prompts/
 ```
+
+**Deviations recorded at F-06 (2026-11-05)**
+
+- `src/builder/` instead of the proposed `src/builder/controls/` plus `src/design/presets/`. The folder holds the reducer, the looks, the contrast maths, the save path and the components; a `controls/` subfolder would have held one of five siblings. The looks are data beside the reducer that applies them, not a preset of the default design.
+- The builder lives at `/dashboard/design`, not the proposed `/dashboard/build`. The page edits the design document; "build" named the feature, not the document.
+- The frame is `/dashboard/preview/frame`, a sibling of the saved-draft preview at `/dashboard/preview` (D-062). The two previews answer different questions — "what did I save" and "what am I editing" — and keeping the frame at its own route keeps the saved-draft page untouched.
+- The frame renders the owner's saved content and profile, not fixture data, and only the design arrives over `postMessage`. Sending content too would mean serialising the whole document on every keystroke, and the builder does not edit content (D-072).
+- `postMessage` carries one message type, `folio:design`. Anything else is ignored, so the frame cannot be driven by a message meant for a different feature later.
 
 **Deviations recorded at F-05 (2026-11-05)**
 

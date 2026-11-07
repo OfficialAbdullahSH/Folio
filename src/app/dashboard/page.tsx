@@ -87,6 +87,12 @@ export default async function DashboardPage() {
             Edit your portfolio
           </Link>
           <Link
+            href="/dashboard/design"
+            className="inline-flex min-h-11 items-center rounded-md border border-rule-strong px-4 text-sm font-medium text-ink hover:bg-canvas"
+          >
+            Design
+          </Link>
+          <Link
             href="/dashboard/preview"
             className="inline-flex min-h-11 items-center rounded-md border border-rule-strong px-4 text-sm font-medium text-ink hover:bg-canvas"
           >

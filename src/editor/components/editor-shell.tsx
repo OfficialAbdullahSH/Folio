@@ -91,7 +91,10 @@ export function EditorShell({
             <h1 className="text-xl font-semibold text-ink">Edit your portfolio</h1>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/dashboard/design" className={BUTTON_SECONDARY}>
+              Design
+            </Link>
             <Link href="/dashboard/preview" className={BUTTON_SECONDARY}>
               Preview
             </Link>

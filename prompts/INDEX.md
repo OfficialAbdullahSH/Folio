@@ -13,6 +13,7 @@ Every prompt sent to DevAI is saved as its own file in this folder: `P-XXX-short
 | P-005b | P-005b-F-04-fixes.md | F-04 | Missing fixtures, screenshot location, light stress theme, anchor offset, acceptance audit | 2026-11-03 | answered, accepted |
 | P-006 | P-006-F-01-auth.md | F-01 | Auth, three tables, row-level security, protected dashboard; adds D-052 to D-058, amends D-004 | 2026-11-03 | answered; owner verification in progress |
 | P-007 | P-007-F-05-content-editor.md | F-05 | Content editor, skills tables and seed, image upload, draft preview | 2026-11-05 | answered; owner verification in progress |
+| P-008 | P-008-F-06-visual-builder.md | F-06 | Visual builder at `/dashboard/design`, live preview frame, looks, readability warnings, save and reset | 2026-11-05 | answered; live verification run 2026-11-07, pending owner sign-off |
 
 ## Feature checklist
 
@@ -23,7 +24,7 @@ Every prompt sent to DevAI is saved as its own file in this folder: `P-XXX-short
 | F-03 | Renderer: design file to public page | P-004 | yes (106 tests total) | pending owner check |
 | F-04 | Design worlds: Editorial, Terminal | P-005, P-005b | yes (153 tests total) | pending owner visual check |
 | F-05 | Content sections and editing | P-007 | yes (282 tests total) | pending owner verification (migration, seed, upload, live save) |
-| F-06 | Visual builder | | | |
+| F-06 | Visual builder | P-008 | yes (343 tests total) | live run 2026-11-07: iframe update, warning, beforeunload, three-width Playwright and save/reload verified with a temporary account; section rows and the invalid-design branch still unit-only; pending owner sign-off |
 | F-07 | Publish to personal link | | | |
 | F-08 | AI design assistant | | | |
 | F-09 | Search by name and skill | | | |

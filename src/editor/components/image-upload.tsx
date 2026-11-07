@@ -111,7 +111,7 @@ export function ImageUpload({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="relative flex flex-wrap items-center gap-3">
         <input
           ref={inputRef}
           id={id}
