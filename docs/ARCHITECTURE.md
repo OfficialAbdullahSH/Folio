@@ -128,6 +128,33 @@ How a save works, in order:
 
 **The preview route.** `src/app/dashboard/preview/page.tsx` reads the saved draft through `readDraftPortfolio` in `src/portfolio/draft.ts`, which answers `ok`, `missing`, `failed` or `invalid`. It then renders with the real `Portfolio` and the real skill names, so preview and the public page cannot drift apart (D-062). It never renders unsaved editor state: what it shows is what a save would have written. A draft that fails validation gets a readable message instead of a crash or a silent reset.
 
+## Publishing (F-07)
+
+Publishing is a copy, not a switch (D-080). The owner's draft stays in `portfolios`, private, editable; publishing writes a snapshot of it to `published_portfolios`, and the public route reads only that table.
+
+| Piece | File | Contract |
+| --- | --- | --- |
+| Snapshot | `src/publish/snapshot.ts` | `buildSnapshot(input)` runs `validateDesign`, `validateContent` and `validateProfile`, returns every error at once, and produces `{ username, displayName, headline, design, content }`. Also holds `canonicalize()` and `publishState()`, which compare a draft with a snapshot |
+| Publish and unpublish | `src/publish/publish.ts` | `publishSnapshot(deps)` and `unpublishPortfolio(deps)` over injected read, write and delete functions. Publish writes `published_at` only when the row does not exist yet, so the first publish time is kept (D-080) |
+| Reset | `src/publish/publish.ts` | `resetToPublished(deps)` copies `design` and `content` from the snapshot back into the draft. Display name and headline are not part of it (D-083) |
+| Notes | `src/publish/notes.ts` | The non-blocking notes the dialog shows: the F-06 readability warnings in words, and the visible sections that have no content. Pure, so the copy is tested (D-086) |
+| Server actions | `src/publish/actions.ts` | `"use server"`. Three actions, each reading the user and the draft on the server, then revalidating the public page and the dashboard (D-085). No form payload carries portfolio data |
+| Read | `src/publish/read.ts` | Reads the owner's own published row for the card and for reset; answers `none`, `ok` or `failed` rather than throwing (D-082) |
+| Public source | `src/publish/source.ts` | `createPublishedPortfolioSource` implements `PortfolioSource` (D-036) over `published_portfolios` with the anon key and no cookies, and falls back to the demo fixtures when nothing matches (D-084) |
+| Card and dialog | `src/publish/components/` | `publish-card.tsx` renders one of the three states; `publish-dialog.tsx` is one native `<dialog>` component used for publish, republish and reset, with `useId()` so each instance has its own label and description ids |
+
+**The three states (D-081).** `publishState({ draft, published })` compares the canonical form of the saved draft — design, content, display name and headline — with the snapshot:
+
+- `not-published`: there is no row. The card offers Publish.
+- `current`: the canonical forms match. The card shows the published date and the public link, with View, Copy link and Unpublish.
+- `changed`: a snapshot exists and something differs. The card adds "You have unpublished changes." with Publish changes and Reset to the published version.
+- `changes`: a snapshot exists and something differs. The card adds "You have unpublished changes." with Publish changes and Reset to the published version.
+Canonical form is the document with object keys sorted at every level and array order kept, so the same data with keys in a different order is not a change (AC-4).
+
+**Why the username comes from the server.** Every action reads the owner's profile row and takes `username` from it. Nothing in the request can name the portfolio being published, so a signed-in user cannot publish under another name (S-10).
+
+**What the dialog says.** Publish, republish and reset all open the same component with different copy, and the confirm button is the only control that acts. The notes above it are advisory and never disable it (D-009, D-086). The dialog names the exact path that will change, `/u/<username>`, so the owner knows what becomes public.
+
 ## Data flows
 
 ### (a) A visitor opens a public page
@@ -147,7 +174,7 @@ sequenceDiagram
     N-->>V: server-rendered page
 ```
 
-The select runs on the server against the public snapshot table, the only table anonymous can read (S-1). Until F-07 writes that table, the route still reads the fixture implementation of `PortfolioSource` (AC-11).
+The select runs on the server against the public snapshot table, the only table anonymous can read (S-1). The source is `createPublishedPortfolioSource` in `src/publish/source.ts`, reached through `src/data/index.ts`, which reads `published_portfolios` by lowercase username with the anon key and no cookies. A username with no published row falls back to the demo fixtures, so `/u/demo-*` keeps working and a real owner always wins over a demo of the same name (D-084). A row that fails validation is treated as missing rather than rendered (D-082).
 
 ### (b) The owner edits in the builder
 
@@ -291,9 +318,44 @@ Three checks guard the message (D-073): the source must be the frame's own paren
 
 The frame page is a separate route rather than a component because media queries read the iframe's own viewport: a 375 px iframe is a 375 px viewport, so the worlds' real breakpoints fire (D-074). It renders `Portfolio` with the owner's **saved** content and profile, so the preview is always the real renderer over real data, and only the design comes over the wire.
 
+### (j) The owner publishes, republishes, unpublishes or resets
+
+```mermaid
+sequenceDiagram
+    participant O as Owner
+    participant C as Publish card
+    participant A as Server action
+    participant S as Supabase
+    participant P as /u/username
+    O->>C: Publish, Publish changes, Unpublish or Reset
+    C->>C: open the dialog, put focus on Cancel
+    O->>C: confirm
+    C->>A: the action, with no portfolio payload
+    A->>S: read the session user, the profile and the saved draft
+    A->>A: buildSnapshot, or read the snapshot for reset
+    alt anything invalid, or not signed in
+        A-->>C: errors, nothing written
+    else valid
+        A->>S: write or delete the owner's published row
+        A->>A: revalidate /u/username and /dashboard
+        A-->>C: the new state
+    end
+    P->>S: the next visit reads the new snapshot
+```
+
+The four actions share one shape: read the user and everything else on the server, validate, write, revalidate the one public path and the dashboard (D-085), and return a state the card renders. Nothing about the portfolio arrives from the browser, so the only thing a caller chooses is whether to act (S-10).
+
+**Publish and republish** run the same code. It reads the profile and the saved draft, builds and validates the snapshot, then upserts the row: `published_at` is written only when the row does not exist, `updated_at` always, so the card can show when the page first went live.
+
+**Unpublish** deletes the owner's row and nothing else. The draft is untouched, the public path answers 404, and the card returns to `not-published`, from which publishing works again (D-082).
+
+**Reset** reads the published snapshot and copies `design` and `content` into the draft. It is refused when there is no snapshot or when the snapshot no longer validates, and it does not touch display name or headline (D-083).
+
+**A note on ordering.** The three actions are independent, so two tabs can each publish: the last write wins, which is the same rule the editor's save uses. There is no lock and none is needed — the row is the owner's own.
+
 ## Folder structure
 
-Built through F-06. F-08 and F-09 add the folders marked proposed.
+Built through F-07. F-08 and F-09 add the folders marked proposed.
 
 ```
 src/
@@ -338,11 +400,12 @@ src/
     worlds/editorial/                 Editorial shell, sections and stylesheet
     worlds/terminal/                  Terminal shell, sections and stylesheet
   data/
-    index.ts                          the implementations the app imports
+    index.ts                          the sources the app imports: the published source, or the fixtures when no database is configured (D-084)
     fixtures/                         seven demo portfolios and the skill catalog
   portfolio/
     defaults.ts                       the default design and the empty content (D-057)
     draft.ts                          creating the draft row once (D-054), and readDraftPortfolio (D-062)
+    references.ts                     the skill and image checks the schema cannot make, shared by save and publish (D-033, D-066)
   editor/
     reducer.ts                        every content edit, as a pure function (D-068)
     save.ts                           validate, then write; no Next, no Supabase
@@ -378,6 +441,15 @@ src/
     components/                       the shell, color and type controls, the section list,
                                       the readability panel, the frame and the dialog
     __tests__/                        Vitest tests, named by acceptance criterion
+  publish/
+    snapshot.ts                       the snapshot, its validation, the canonical form and the state (D-080, D-081)
+    publish.ts                        publish, unpublish and reset, over injected reads and writes (D-082, D-083)
+    actions.ts                        the three Server Actions, and the revalidation (D-085)
+    notes.ts                          the dialog's advisory notes: readability and empty sections (D-086)
+    read.ts                           the owner's own published row, for the card and for reset
+    source.ts                         the public PortfolioSource over published_portfolios (D-084)
+    components/                       the card and the shared dialog
+    __tests__/                        Vitest tests, named by acceptance criterion
 supabase/
   migrations/0001_init.sql            tables, trigger, availability function, RLS policies
   migrations/0002_skills_and_storage.sql  skills, skill_aliases, the project-images bucket and its policies
@@ -386,6 +458,16 @@ supabase/
 docs/
 prompts/
 ```
+
+
+**Deviations recorded at F-07 (2026-11-07)**
+
+- `src/publish/` holds the snapshot, the three operations, the notes and the public source together. The proposal put publishing in `src/portfolio/`; the portfolio folder owns the draft row, and publishing is a different lifecycle over a different table, so keeping it separate keeps the draft's data access from growing a public read path.
+- `src/portfolio/references.ts` was extracted from `src/editor/save.ts` rather than copied. Publishing has to make the same two checks the editor makes — skill slugs and image URLs — and a second copy would be a second rule to keep in step (D-080).
+- The public source is wired in `src/data/index.ts` instead of in the route. F-03 built the route against one seam (D-036), and replacing the implementation behind it left `src/app/u/[username]/` untouched.
+- One dialog component serves all three confirmations. The copy, the confirm label and the action are props; only the ids differ per instance, and they come from `useId()` after the live run found all three sharing `publish-dialog-title`.
+- The card computes its state on the server and takes no client state. Publish and unpublish both return a state the card renders, so there is nothing to keep in sync after an action.
+- The demo fallback lives in the published source rather than in the route (D-084). A route-level fallback would have had to know that a missing row is not always an error, which is the source's job.
 
 **Deviations recorded at F-06 (2026-11-05)**
 
@@ -442,7 +524,7 @@ Written as rules code can be checked against, not as intentions.
 
 - S-7. Every URL in either document is validated as `http` or `https` at schema level; `javascript:`, `data:` and other schemes are rejected there, not filtered at render time.
 - S-8. Image uploads over 2 MB, or outside JPEG, PNG and WebP, are rejected (D-025). The bucket limits enforce it; the browser check only gives the message sooner.
-- S-10. A save writes only the signed-in user's own rows. The user id comes from `getCurrentUser()`, never from the form payload, and RLS refuses anything else.
+- S-10. A save, a publish, an unpublish or a reset writes only the signed-in user's own rows. The user id and the username come from the server — `getCurrentUser()` and the owner's profile row — never from the form payload, and RLS refuses anything else (D-080).
 - S-11. A project `imageUrl` is accepted only when it starts with this project's exact `project-images` prefix, so a look-alike host or a URL that merely contains the prefix is refused (D-066).
 - S-12. `skills` and `skill_aliases` are readable by everyone and writable by no client role: RLS is enabled with a select policy and no insert, update or delete policy (D-063). `rls-checklist.md` records the check.
 - S-13. Storage writes are limited to the owner's own folder: the insert, update and delete policies on `storage.objects` require `(storage.foldername(name))[1]` to equal `auth.uid()`, and anonymous has no write policy at all (D-065).

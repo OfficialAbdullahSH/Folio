@@ -14,6 +14,7 @@ Every prompt sent to DevAI is saved as its own file in this folder: `P-XXX-short
 | P-006 | P-006-F-01-auth.md | F-01 | Auth, three tables, row-level security, protected dashboard; adds D-052 to D-058, amends D-004 | 2026-11-03 | answered; owner verification in progress |
 | P-007 | P-007-F-05-content-editor.md | F-05 | Content editor, skills tables and seed, image upload, draft preview | 2026-11-05 | answered; owner verification in progress |
 | P-008 | P-008-F-06-visual-builder.md | F-06 | Visual builder at `/dashboard/design`, live preview frame, looks, readability warnings, save and reset | 2026-11-05 | answered; live verification run 2026-11-07, pending owner sign-off |
+| P-009 | P-009-F-07-publish.md | F-07 | Publish, unpublish, reset to the published version, Supabase-backed public source; adds D-080 to D-086 | 2026-11-07 | answered; live verification run 2026-11-07, pending owner sign-off |
 
 ## Feature checklist
 
@@ -25,7 +26,7 @@ Every prompt sent to DevAI is saved as its own file in this folder: `P-XXX-short
 | F-04 | Design worlds: Editorial, Terminal | P-005, P-005b | yes (153 tests total) | pending owner visual check |
 | F-05 | Content sections and editing | P-007 | yes (282 tests total) | pending owner verification (migration, seed, upload, live save) |
 | F-06 | Visual builder | P-008 | yes (343 tests total) | live run 2026-11-07: iframe update, warning, beforeunload, three-width Playwright and save/reload verified with a temporary account; section rows and the invalid-design branch still unit-only; pending owner sign-off |
-| F-07 | Publish to personal link | | | |
+| F-07 | Publish to personal link | P-009 | yes (409 tests total) | live run 2026-11-07: publish, republish, reset, unpublish, copy link, the public page in an anonymous context, readability notes, the demo pages and three-width overflow verified with a temporary account; RLS checks and the invalid-data refusals still unit-only; pending owner sign-off |
 | F-08 | AI design assistant | | | |
 | F-09 | Search by name and skill | | | |
 

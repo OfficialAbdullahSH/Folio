@@ -1,7 +1,7 @@
 import { displayNameSchema, headlineSchema, validateContent } from "@/schema";
 import type { ContentDocument } from "@/schema";
 
-import { isProjectImageUrl } from "./image-url";
+import { checkContentReferences } from "@/portfolio/references";
 
 /**
  * Saving the editor (D-061).
@@ -86,34 +86,6 @@ function readProfile(input: unknown): { errors: FieldError[]; data: SaveProfile 
   return { errors, data: errors.length === 0 ? { displayName, headline } : null };
 }
 
-/** Skill slugs and image URLs can only be checked once the shape is known. */
-function checkReferences(
-  content: ContentDocument,
-  deps: Pick<SaveDeps, "knownSkillSlugs" | "imagePrefix">,
-): FieldError[] {
-  const errors: FieldError[] = [];
-
-  content.skills.skillIds.forEach((slug, index) => {
-    if (!deps.knownSkillSlugs.has(slug)) {
-      errors.push({
-        path: `skills.skillIds.${index}`,
-        message: `"${slug}" is not in the skill list. Please pick it again.`,
-      });
-    }
-  });
-
-  content.projects.items.forEach((project, index) => {
-    if (project.imageUrl !== undefined && !isProjectImageUrl(project.imageUrl, deps.imagePrefix)) {
-      errors.push({
-        path: `projects.items.${index}.imageUrl`,
-        message: "That image was not uploaded here. Please upload it again.",
-      });
-    }
-  });
-
-  return errors;
-}
-
 export async function saveDraft(
   input: SaveInput,
   deps: SaveDeps,
@@ -127,7 +99,7 @@ export async function saveDraft(
   ];
 
   if (content.success) {
-    errors.push(...checkReferences(content.data, deps));
+    errors.push(...checkContentReferences(content.data, deps));
   }
 
   if (!content.success || !profile.data || errors.length > 0) {
