@@ -144,6 +144,12 @@ export default async function DashboardPage() {
           >
             Preview
           </Link>
+          <Link
+            href="/search"
+            className="inline-flex min-h-11 items-center rounded-md border border-rule-strong px-4 text-sm font-medium text-ink hover:bg-canvas"
+          >
+            Search portfolios
+          </Link>
         </div>
       </section>
 

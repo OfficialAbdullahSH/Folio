@@ -15,6 +15,7 @@ Every prompt sent to DevAI is saved as its own file in this folder: `P-XXX-short
 | P-007 | P-007-F-05-content-editor.md | F-05 | Content editor, skills tables and seed, image upload, draft preview | 2026-11-05 | answered; owner verification in progress |
 | P-008 | P-008-F-06-visual-builder.md | F-06 | Visual builder at `/dashboard/design`, live preview frame, looks, readability warnings, save and reset | 2026-11-05 | answered; live verification run 2026-11-07, pending owner sign-off |
 | P-009 | P-009-F-07-publish.md | F-07 | Publish, unpublish, reset to the published version, Supabase-backed public source; adds D-080 to D-086 | 2026-11-07 | answered; live verification run 2026-11-07, pending owner sign-off |
+| P-010 | P-010-F-09-search.md | F-09 | Public `/search` with autocomplete, result cards, pagination and states; `0003_search.sql` with two indexes and two functions; generated demo seed; adds D-087 to D-094 | 2026-11-12 | answered; live verification run 2026-11-12, pending owner sign-off |
 
 ## Feature checklist
 
@@ -28,7 +29,7 @@ Every prompt sent to DevAI is saved as its own file in this folder: `P-XXX-short
 | F-06 | Visual builder | P-008 | yes (343 tests total) | live run 2026-11-07: iframe update, warning, beforeunload, three-width Playwright and save/reload verified with a temporary account; section rows and the invalid-design branch still unit-only; pending owner sign-off |
 | F-07 | Publish to personal link | P-009 | yes (409 tests total) | live run 2026-11-07: publish, republish, reset, unpublish, copy link, the public page in an anonymous context, readability notes, the demo pages and three-width overflow verified with a temporary account; RLS checks and the invalid-data refusals still unit-only; pending owner sign-off |
 | F-08 | AI design assistant | | | |
-| F-09 | Search by name and skill | | | |
+| F-09 | Search by name and skill | P-010 | yes (508 tests total) | live run 2026-11-12 against the owner's project with the demo seed: the no-query page, five spellings of React, a name prefix, an Arabic name, a hostile string, a skill chip, invalid and unknown slugs, the combobox keyboard path, the landing form, `noindex` and three-width overflow; a real page 2, both sections at once, the loading and error states, the dashboard link and the removal script still unit-only or unseen; pending owner sign-off |
 
 ## Conventions
 

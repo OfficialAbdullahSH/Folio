@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { BUTTON_SECONDARY, INPUT } from "@/editor/lib/styles";
+
 export default function Home() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col justify-center gap-10 px-6 py-20">
@@ -29,8 +31,29 @@ export default function Home() {
         </Link>
       </div>
 
+      <form action="/search" method="get" role="search" className="flex flex-col gap-2 sm:flex-row">
+        <label htmlFor="home-search" className="sr-only">
+          Search published portfolios
+        </label>
+        <input
+          id="home-search"
+          name="q"
+          type="search"
+          dir="auto"
+          placeholder="A name, or a skill like react"
+          className={INPUT}
+        />
+        <button type="submit" className={BUTTON_SECONDARY}>
+          Search
+        </button>
+      </form>
+
       <p className="text-sm text-ink-soft">
-        Or look at an example:{" "}
+        Or{" "}
+        <Link href="/search" className="underline underline-offset-2">
+          browse everyone who has published
+        </Link>
+        , or look at an example:{" "}
         <Link href="/u/demo-editorial" className="underline underline-offset-2">
           Editorial
         </Link>{" "}

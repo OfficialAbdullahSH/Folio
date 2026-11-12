@@ -9,7 +9,7 @@
 | Data, auth, storage | Supabase | Postgres, Auth and Storage in one service, with row-level security doing the privacy work. |
 | Validation | Zod | The schemas validate saved documents, AI output and form input. |
 | Testing | Vitest | Unit tests for the schema layer now; the same runner covers later features without a browser. |
-| Search | Postgres full-text search | No extra service at v1 scale; name search plus a skills join table. |
+| Search | Postgres full-text search, plus JSONB containment for skills | No extra service at v1 scale. Name search is FTS over the published snapshot; skill search is containment on the slugs that snapshot already carries (D-089, D-090). |
 | AI | One LLM behind one interface (D-013, provider open) | Structured output mapped onto the design document; the provider stays swappable. |
 | Hosting | Vercel | Matches Next.js, no configuration. |
 
@@ -70,7 +70,7 @@ Tints come from `color-mix()` over these variables. No world source contains a c
 
 ## Data model
 
-Settled by D-019 to D-026, D-053 and D-063. Three tables exist after F-01 and two more after F-05; the search join table arrives with F-09.
+Settled by D-019 to D-026, D-053, D-063 and D-089. Three tables exist after F-01, two more after F-05, and F-09 adds no table: search reads the published snapshot it already has.
 
 | Table | Holds | Policy |
 | --- | --- | --- |
@@ -79,7 +79,8 @@ Settled by D-019 to D-026, D-053 and D-063. Three tables exist after F-01 and tw
 | `published_portfolios` | the public snapshot: `user_id`, `username`, `display_name`, `headline`, `design`, `content`, `published_at`, `updated_at` | anonymous and signed-in read every row; the owner writes only their own |
 | `skills` | one row per canonical skill: `slug` (primary key), `name`. Loaded from `supabase/seed/skills.sql` (D-063) | everyone reads, signed in or not; no client role can write — there is no insert, update or delete policy |
 | `skill_aliases` | `alias` (primary key, lowercase), `skill_slug` (references `skills`, cascade delete). "ReactJS" and "react.js" both resolve to `react` (D-064) | same as `skills` |
-| `portfolio_skills` (F-09) | `portfolio_id`, `skill_slug` — the join search reads | proposed |
+
+- **There is no `portfolio_skills` join table.** F-09 searches the skill slugs inside the published `content` document with JSON containment (D-089). A published snapshot is already a frozen copy of the owner's skills, so a join table would be a second copy to keep in step with publish, unpublish and reset.
 
 - A draft cannot leak because no policy exposes the tables that hold drafts; `published_portfolios` is the only public read path (D-053, S-1).
 - `username` is unique on `lower(username)` in both `profiles` and `published_portfolios`, and a check constraint enforces the D-032 format. The reserved list stays in the application (F-02 schema), not in SQL.
@@ -155,6 +156,40 @@ Canonical form is the document with object keys sorted at every level and array 
 
 **What the dialog says.** Publish, republish and reset all open the same component with different copy, and the confirm button is the only control that acts. The notes above it are advisory and never disable it (D-009, D-086). The dialog names the exact path that will change, `/u/<username>`, so the owner knows what becomes public.
 
+## Search (F-09)
+
+Search is a public page at `/search`, with no session (D-088). It reads `published_portfolios` through the anon key and two SQL functions, and it never touches `portfolios` or `profiles`.
+
+| Piece | File | Contract |
+| --- | --- | --- |
+| Query cleaning | `src/search/query.ts` | `cleanTerms(text)` turns free text into the words the function takes: Unicode letters and digits only, so Arabic survives, and punctuation, quotes and every text-search operator dropped. Lowercased and de-duplicated. `parseSearchParams(raw)` validates `q` (at most 100 characters), `skill` (the F-02 slug format) and `page` (a positive integer) with Zod, and answers the default instead of throwing. |
+| Pagination | `src/search/query.ts` | `pageOffset`, `pageCount` and `clampPage` over `SEARCH_PAGE_SIZE = 12`, so the arithmetic is tested with no database. |
+| Resolution | `src/search/resolve.ts` | `resolveQuerySkills(query, terms, skills, aliases)` maps a query to canonical slugs through the F-05 resolver in `src/editor/skills.ts`, so the picker and search agree on what "ReactJS" means (D-092). `planQuery` answers `none`, `skill` (from `?skill=`) or `text` (terms plus the slugs they name). `splitSections` turns that plan into the lists to load, skill first and name second (D-094). |
+| Data access | `src/search/data.ts` | Calls `search_portfolios` and `popular_skills` through `rpc` with the anon key and no cookies, and reads the skill list and aliases for autocomplete. Answers `ok`, `failed` or `unavailable` rather than throwing, and validates every row with Zod, dropping one that does not match the result shape. `loadSection` loads one list at a page, `loadPopularSkills` and `loadSkillCatalog` answer empty data rather than a failure when only the decoration is missing. |
+| Page | `src/app/search/page.tsx` | Server component: validates the parameters, plans the sections, loads them, and renders the sections, the cards, the pagination and the four states. |
+| Search box | `src/search/components/search-box.tsx` | Client component: a GET form that works without JavaScript, with the accessible combobox over the skill list on top. |
+| Results | `src/search/components/` | `result-card.tsx`, `result-section.tsx` (count and pagination), `skill-chips.tsx`, `search-states.tsx` (no results, nothing published, failure), and `src/app/search/loading.tsx` for the loading state. |
+
+**The two indexes** (D-089, D-090):
+
+| Index | On | Answers |
+| --- | --- | --- |
+| `published_portfolios_name_fts_idx` | `to_tsvector('simple', display_name \|\| ' ' \|\| username \|\| ' ' \|\| headline)`, GIN | every word as a prefix, in the name, the username or the headline |
+| `published_portfolios_skills_idx` | `(content -> 'skills' -> 'skillIds')`, GIN `jsonb_path_ops` | containment of any one of the slugs given |
+
+**The two functions** (D-091). Both are `security invoker` with `set search_path = ''` and every object qualified, execute revoked from `public` and granted to `anon` and `authenticated` only. Security invoker means the RLS policy on `published_portfolios` is still the boundary: the functions cannot return a draft even if their bodies were wrong.
+
+| Function | Returns |
+| --- | --- |
+| `search_portfolios(p_terms text[], p_skill_slugs text[], p_limit int, p_offset int)` | `username, display_name, headline, skill_slugs` (up to 6), `world`, `accent`, `published_at`, `total_count` (a window count over the matches). The limit is clamped to 1..24 and the offset to 0 or more inside the function, whatever the caller sends. Ranking: an exact name or username, then a prefix, then the rest, then newest publish time. |
+| `popular_skills(p_limit int)` | `slug, portfolio_count` for the published portfolios that list each slug, most popular first, capped at 24. |
+
+**How a term is matched without reaching the parser.** The app cleans the text into words, and the function cleans it again: every quote and backslash is stripped from each term, a term that becomes empty is dropped, and each remaining term is wrapped in single quotes with `:*` appended and joined with ` & `. A quoted lexeme cannot contain an operator, whatever the caller sent, so the string handed to `to_tsquery` is always well formed and nothing a caller types can arrive as syntax (S-14). Arabic letters are not touched, so they survive into the query.
+
+**Why the page is dynamic.** Publish and unpublish change `published_portfolios`, and search keeps no copy of its own, so every request asks the table. The route sets `instant = false` like the other data-backed routes, and a query or skill in the URL makes it `noindex`.
+
+**How a list is paged** (D-094). A list asks the function for 12 rows at the offset of the page in the URL. When that page is past the end the answer is empty and carries no count, so the page then asks for the count alone and loads the last page instead: a hand-edited or stale link shows results, not a blank page. Both lists on one page share the `page` parameter, each shows its own total, and a list with nothing in it is dropped when the other one has results. A free-text query that names a skill therefore reads skill matches first and name matches second, and never repeats "0 people".
+
 ## Data flows
 
 ### (a) A visitor opens a public page
@@ -208,14 +243,20 @@ sequenceDiagram
 ### (d) A visitor searches
 
 ```mermaid
+```mermaid
 flowchart LR
     Q[Query: name or skill] --> N[Next.js server]
     Q --> A[Alias map: ReactJS to React]
     A --> N
-    N --> F[(Postgres FTS over published portfolios)]
+    N --> F[(search_portfolios over published_portfolios)]
+    N --> P2[(popular_skills)]
     F --> R[Results: name, headline, skills, link]
+    P2 --> R
     R --> P[/u/username]
 ```
+
+The alias step runs in the app, over the public `skills` and `skill_aliases` tables (D-092), so a term that names a skill produces a slug and a skill section. A term that names nothing is only a name search. Both queries read the published snapshot, so an unpublished portfolio disappears from search the moment its row is deleted (D-082).
+
 
 ### (e) An owner signs up, logs in and logs out
 
@@ -373,7 +414,8 @@ src/
     dashboard/preview/page.tsx        the saved draft through the real renderer (F-05); owner only
     u/[username]/page.tsx             public portfolio route, metadata
     u/[username]/portfolio-content.tsx  route body, loaded behind the route's data access
-    (public)/search/page.tsx          search (proposed)
+    search/page.tsx                   search by name and skill, public (F-09)
+    search/loading.tsx                the loading skeleton for the search page (AC-11)
     dashboard/design/page.tsx          the visual builder (F-06); owner only
     dashboard/preview/frame/page.tsx   the preview frame, driven by postMessage (F-06); owner only
     api/ai/generate/route.ts          AI route handler (proposed)
@@ -427,7 +469,16 @@ src/
     auth/actions.ts                   the Server Actions the forms call
     auth/session.ts                   getCurrentUser and getOwnProfile
     auth/redirects.ts                 the AC-6 rules as a pure function
-    search/                           query building, alias map (proposed)
+  search/
+    query.ts                          cleaning a query into terms, the parameter schemas, pagination and page links (D-090)
+    resolve.ts                        a term to a skill slug through the F-05 resolver, and which lists a query shows (D-092, D-094)
+    data.ts                           the two rpc calls and the skill list, anon key and no cookies, and the page-ahead clamp (D-091, D-094)
+    components/search-box.tsx         the combobox over the skill list, and the form that runs a search
+    components/result-card.tsx        one result: name, headline, skills, accent, link
+    components/result-section.tsx     one list: its heading, its count and its own pagination
+    components/skill-chips.tsx        the popular skills, each linking to its search
+    components/search-states.tsx      no results, nothing published, and the failure panel
+    __tests__/                        Vitest tests, named by acceptance criterion
   builder/
     reducer.ts                        every design edit, as a pure function (D-068)
     looks.ts                          the named looks, as data (D-075)
@@ -453,12 +504,26 @@ src/
 supabase/
   migrations/0001_init.sql            tables, trigger, availability function, RLS policies
   migrations/0002_skills_and_storage.sql  skills, skill_aliases, the project-images bucket and its policies
+  migrations/0003_search.sql          the two GIN indexes and the two search functions (D-089, D-090, D-091)
   seed/skills.sql                     the canonical skill list and its aliases, safe to re-run
+  seed/demo_portfolios.sql            ten published demo portfolios, safe to re-run (D-093)
+  seed/demo_portfolios_remove.sql     removes exactly the demo users and their rows (D-093)
   tests/rls-checklist.md              the manual checks AC-9, AC-1 and AC-17 require
+scripts/
+  generate-demo-seed.ts               the demo data, validated, written to the two seed files (D-093)
 docs/
 prompts/
 ```
 
+
+**Deviations recorded at F-09 (2026-11-12)**
+
+- There is no `portfolio_skills` table. Search reads the skill slugs inside the published `content` document with JSON containment (D-089), so a published portfolio is searchable by skill the moment it is published and disappears the moment it is unpublished, with no second write path to keep correct.
+- The route is `src/app/search/page.tsx`, not the proposed `src/app/(public)/search/page.tsx`. F-03 settled that a route group earns its place only when a second layout differs, and search uses the root layout.
+- `src/search/` holds the cleaning, the resolution, the data access and the components, rather than the proposed `src/lib/search/`. The cleaning and pagination are app logic with tests beside them, not a library helper, and keeping them out of `lib/` keeps `lib/` for the Supabase and auth plumbing.
+- Alias resolution reuses `src/editor/skills.ts` instead of a second resolver (D-092). The picker and search must agree on what "ReactJS" means, and a copy would be a second rule to keep in step.
+- The page clamps a page number past the end instead of showing an empty page. The function returns `total_count` with the rows, so the page asks once for page 1 when the requested page is empty, then asks for the last page. A URL like `?page=99` renders the last page rather than a misleading "no results".
+- Both result sections share one `page` parameter. A free-text search that resolves to a skill shows two lists, and one parameter keeps the URL honest; each list paginates on its own totals and only shows controls when it has more than one page.
 
 **Deviations recorded at F-07 (2026-11-07)**
 
@@ -529,6 +594,13 @@ Written as rules code can be checked against, not as intentions.
 - S-12. `skills` and `skill_aliases` are readable by everyone and writable by no client role: RLS is enabled with a select policy and no insert, update or delete policy (D-063). `rls-checklist.md` records the check.
 - S-13. Storage writes are limited to the owner's own folder: the insert, update and delete policies on `storage.objects` require `(storage.foldername(name))[1]` to equal `auth.uid()`, and anonymous has no write policy at all (D-065).
 
+**Search (D-088 to D-092)**
+
+- S-14. `search_portfolios` and `popular_skills` are `security invoker` with `set search_path = ''`, and execute is revoked from `public` and granted to `anon` and `authenticated` only. A caller's text never reaches SQL or the text-search parser: the function strips everything but letters and digits from each term before it builds a query, and the limit and offset are clamped inside the function.
+- S-15. Search reads `published_portfolios` and nothing else. It uses the anon key with no cookies, so RLS decides what it can see, and the functions return public columns only — no user id, no draft, no profile row.
+- S-16. The demo seed inserts users that cannot log in: no password, the `demo.folio.invalid` domain and fixed ids (D-093). The removal script deletes exactly those ids, in dependency order.
+- S-13. Storage writes are limited to the owner's own folder: the insert, update and delete policies on `storage.objects` require `(storage.foldername(name))[1]` to equal `auth.uid()`, and anonymous has no write policy at all (D-065).
+
 ## Sources of truth
 
 | File | Owns |
@@ -546,10 +618,14 @@ Written as rules code can be checked against, not as intentions.
 | `src/editor/skills.ts` | How a query becomes a skill, by name or by alias |
 | `src/editor/image-url.ts` | Which image URLs and files are accepted |
 | `supabase/seed/skills.sql` | The canonical skill list and its aliases (D-063) |
+| `src/search/query.ts` | How free text becomes search terms, and how a page number becomes an offset (D-090) |
+| `src/search/resolve.ts` | Which skill slugs a query means, and which result sections it shows (D-092) |
+| `supabase/migrations/0003_search.sql` | The two search functions and the two indexes, and who may call them (D-089 to D-091) |
+| `scripts/generate-demo-seed.ts` | The demo people, and the SQL the seed files contain (D-093) |
 | `src/lib/auth/` | The signup, login, logout and route-protection rules |
 | `src/lib/supabase/` | The two clients and the session refresh |
 | `src/proxy.ts` | Which requests are redirected, and the session refresh hook |
-| `supabase/migrations/` | Tables, the profile trigger, the availability function, RLS policies, the skill tables, the storage bucket |
+| `supabase/migrations/` | Tables, the profile trigger, the availability function, RLS policies, the skill tables, the storage bucket, the search indexes and functions |
 | `supabase/tests/rls-checklist.md` | The manual proof that the policies hold |
 | `DECISIONS.md` | Why anything is the way it is |
 | `docs/FEATURES.md` | Scope and dependency order |

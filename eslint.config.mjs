@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The compiled demo seed generator (`npm run seed:demo`): CommonJS output.
+    ".seed-build/**",
   ]),
   {
     // Server actions take the previous state as their first argument even when they

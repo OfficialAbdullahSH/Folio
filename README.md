@@ -35,11 +35,13 @@ The app runs without these steps, but signup, login and the editor need a Supaba
 2. In **SQL Editor**, run `supabase/migrations/0001_init.sql` once, top to bottom. It creates `profiles`, `portfolios`, `published_portfolios`, the profile trigger, the `is_username_available` function and every RLS policy.
 3. In the same **SQL Editor**, run `supabase/migrations/0002_skills_and_storage.sql` once. It creates `skills`, `skill_aliases`, the public `project-images` bucket with its size and type limits, and the policies that keep each user inside their own folder.
 4. In the same **SQL Editor**, run `supabase/seed/skills.sql`. It loads the canonical skill list and the aliases the picker resolves. Running it again updates the same rows instead of duplicating them.
-5. In **Authentication → Sign In / Providers → Email**, turn **Confirm email** off (D-005). Without this a new account has no session and the signup form says it could not sign you in.
-6. Copy `.env.example` to `.env.local` and fill in the project URL and the publishable key from **Project Settings → API**. The legacy anon key name, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, is also accepted (D-060). `.env.local` is gitignored; never put the service-role key there.
-7. Restart `npm run dev`, then sign up at `/signup`. The dashboard is at `/dashboard`, the editor at `/dashboard/edit`, and the draft preview at `/dashboard/preview`.
+5. For search (F-09), run `supabase/migrations/0003_search.sql` once. It adds the two GIN indexes and the `search_portfolios` and `popular_skills` functions. Both indexes are `if not exists` and both functions are `create or replace`, so it is safe to run again.
+6. Optional, for a search page with something in it: run `supabase/seed/demo_portfolios.sql`. It adds ten fictional portfolios from the `demo.folio.invalid` domain with fixed ids. Regenerate the file with `npm run seed:demo` after editing `src/search/demo-seed.ts`. Remove exactly those ten with `supabase/seed/demo_portfolios_remove.sql`. The demo users cannot sign in.
+7. In **Authentication → Sign In / Providers → Email**, turn **Confirm email** off (D-005). Without this a new account has no session and the signup form says it could not sign you in.
+8. Copy `.env.example` to `.env.local` and fill in the project URL and the publishable key from **Project Settings → API**. The legacy anon key name, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, is also accepted (D-060). `.env.local` is gitignored; never put the service-role key there.
+9. Restart `npm run dev`, then sign up at `/signup`. The dashboard is at `/dashboard`, the editor at `/dashboard/edit`, the draft preview at `/dashboard/preview`, and search at `/search`.
 
-Steps 3 and 4 are what the skills picker reads. Without them the editor still opens, the picker says the list is not loaded, and saving refuses rather than writing skill slugs that do not exist.
+Steps 3 and 4 are what the skills picker reads. Without them the editor still opens, the picker says the list is not loaded, and saving refuses rather than writing skill slugs that do not exist. Step 5 is what `/search` reads: without it the page says search is not available right now.
 
 To prove the policies hold, run the checks in `supabase/tests/rls-checklist.md`. They need two accounts created through `/signup`.
 
@@ -52,7 +54,8 @@ To prove the policies hold, run the checks in `supabase/tests/rls-checklist.md`.
 | `/dashboard` | the signed-in home; creates the draft on first visit; anonymous visitors are sent to `/login` |
 | `/dashboard/edit` | the content editor (F-05); owner only |
 | `/dashboard/preview` | the saved draft rendered by the real renderer (F-05); owner only |
-| `/u/<username>` | public portfolio (F-03, fixture data until F-07) |
+| `/u/<username>` | public portfolio (F-03; published snapshots from F-07, demo fixtures when a name has none) |
+| `/search` | search published portfolios by name and skill (F-09), with no account needed |
 
 ## Conventions
 

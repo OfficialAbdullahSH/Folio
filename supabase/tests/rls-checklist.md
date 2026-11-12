@@ -124,6 +124,26 @@ rollback;
 | 30 | An anonymous user cannot write at all | `begin; set local role anon; insert into storage.objects (bucket_id, name) values ('project-images', '<A_UUID>/anon.png'); rollback;` | `ERROR 42501: new row violates row-level security policy for table "objects"` |
 | 31 | An upload over 2 MB, or of the wrong type, is refused | In the app, try a 3 MB JPEG and then a GIF | both refused with a clear message; a direct Storage API upload returns `Payload too large` / `mime type ... is not supported` |
 
+### Search (F-09)
+
+Run these after `0003_search.sql` and the demo seed. Each block assumes the impersonation
+preamble above; `<A_USERNAME>` is a demo username such as `demo-sara-ahmed`.
+
+| # | Case | How | Expected |
+| --- | --- | --- | --- |
+| 32 | Anonymous can execute `search_portfolios` | `begin; set local role anon; select count(*) from public.search_portfolios(); rollback;` | a count equal to `select count(*) from public.published_portfolios;` |
+| 33 | Search never returns a draft | as `anon`, `select * from public.search_portfolios(p_terms => array['<the display name of a portfolio that was never published>']);` | `0 rows`, while `select count(*) from public.portfolios;` as `anon` is also `0` |
+| 34 | Unpublishing removes a portfolio from search | as the owner, unpublish in the app; then as `anon`, `select * from public.search_portfolios(p_terms => array['<A_USERNAME>']);` | `0 rows` for that username, and the public page is a 404 |
+| 35 | The limit and the offset are clamped | as `anon`, `select count(*) from public.search_portfolios(p_limit => 1000);` then `select count(*) from public.search_portfolios(p_limit => 0);` | the first returns at most `24`; the second returns `1`, not an error |
+| 36 | A hostile term is not text-search syntax | as `anon`, `select count(*) from public.search_portfolios(p_terms => array[''' & \| ! ( ) : * < > -- ; " \ %']);` | no error; `0` rows |
+| 37 | `popular_skills` counts published rows only | as `anon`, `select * from public.popular_skills(5);` | at most `5` rows, most common first; with the demo seed, `react` = `5` and `postgresql` = `4` |
+| 38 | Execute is not granted to `public` | `select has_function_privilege('public', 'public.search_portfolios(text[],text[],integer,integer)', 'execute');` and the same for `public.popular_skills(integer)` | both `false` |
+
+**Status of these checks.** The owner ran `0003_search.sql` and the demo seed on the live project and
+confirmed the six checks quoted in the P-010 report (published count +10, `react` → 5, `popular_skills`
+counts, the Arabic name, the anonymous count, and 0 drafts for `anon`). Checks 32–38 above were written
+after that run; **they have not been executed**, except the parts those six checks already covered.
+
 ## What each check proves
 
 - Checks 19–20: the picker and the F-09 search can read the list without an account, which is the
@@ -135,3 +155,6 @@ rollback;
 - Checks 27–30: a user writes only inside their own folder and anonymous cannot write at all.
 - Check 31: the size and type limits hold at the Storage API, which is the guard the browser
   check only duplicates.
+- Checks 32–38: search can be called by an anonymous visitor, it still sees only published rows, the
+  limits are the function's and not the caller's, a caller's punctuation cannot become syntax, and
+  execute is not open to `public`.
