@@ -1,19 +1,24 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { redirectFor } from "@/lib/auth/redirects";
+import { redirectLocation } from "@/lib/auth/redirects";
 import { updateSession } from "@/lib/supabase/proxy";
 
 export async function proxy(request: NextRequest) {
   const { response, userId } = await updateSession(request);
-  const target = redirectFor(request.nextUrl.pathname, userId !== null);
+  const target = redirectLocation(
+    request.nextUrl.pathname,
+    request.nextUrl.search,
+    userId !== null,
+  );
 
   if (target === null) {
     return response;
   }
 
+  const queryStart = target.indexOf("?");
   const url = request.nextUrl.clone();
-  url.pathname = target;
-  url.search = "";
+  url.pathname = queryStart === -1 ? target : target.slice(0, queryStart);
+  url.search = queryStart === -1 ? "" : target.slice(queryStart);
 
   const redirect = NextResponse.redirect(url);
 

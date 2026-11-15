@@ -1,7 +1,11 @@
 "use client";
 
 import { useActionState, useEffect, useReducer, useRef, useState } from "react";
-import Link from "next/link";
+
+import { GuardedLink } from "@/components/guarded-link";
+import { useUnsavedChanges } from "@/components/unsaved-changes";
+import { useSavedDocument } from "@/components/use-saved-document";
+import { nextStepsFor } from "@/lib/navigation/next-steps";
 
 import { LIMITS } from "@/schema";
 import type { ContentDocument } from "@/schema";
@@ -28,18 +32,39 @@ export type EditorShellProps = {
   aliases: SkillAlias[];
 };
 
-export function EditorShell({
+export function EditorShell(props: EditorShellProps) {
+  const { discardToken } = useUnsavedChanges();
+  const [saved, setSaved] = useState<EditorState>(() => ({
+    content: props.content,
+    profile: props.profile,
+  }));
+
+  // Leave means discard (D-104). Next keeps the route the owner left mounted but hidden,
+  // so its state outlives the navigation: a new key is what rebuilds the form from the
+  // saved document, and it also returns the status to "All changes saved".
+  return <EditorForm key={discardToken} {...props} initial={saved} onSaved={setSaved} />;
+}
+
+type EditorFormProps = EditorShellProps & {
+  /** The document the server holds, which Leave restores. */
+  initial: EditorState;
+  onSaved: (state: EditorState) => void;
+};
+
+function EditorForm({
   userId,
   username,
-  profile,
-  content,
   skills,
   aliases,
-}: EditorShellProps) {
-  const [state, dispatch] = useReducer(editorReducer, { content, profile } as EditorState);
+  initial,
+  onSaved,
+}: EditorFormProps) {
+  const [state, dispatch] = useReducer(editorReducer, initial);
   const [saveState, formAction, isPending] = useActionState(saveContentAction, IDLE);
   const [revision, setRevision] = useState(0);
   const summaryRef = useRef<HTMLDivElement>(null);
+  const { setDirty: reportDirty } = useUnsavedChanges();
+  const { saved, remember, reportSaved } = useSavedDocument<EditorState>(initial);
 
   // Derived, not stored: the action echoes back the revision it was given, so a save
   // clears the warning without an effect and a later edit raises it again.
@@ -51,6 +76,23 @@ export function EditorShell({
       summaryRef.current?.focus();
     }
   }, [saveState]);
+  // The header and the tab bar ask this before they navigate (D-098). The page also
+  // hears the flag when the editor unmounts, so a guard never outlives the form.
+  useEffect(() => {
+    reportDirty(dirty);
+
+    return () => reportDirty(false);
+  }, [dirty, reportDirty]);
+
+  // What Leave restores: the document the server holds, which is the one the last
+  // successful save sent. The page's props do not change when a save succeeds.
+  useEffect(() => {
+    reportSaved(saveState.status === "saved" ? saveState.revision : null);
+  }, [saveState, reportSaved]);
+
+  useEffect(() => {
+    onSaved(saved.document);
+  }, [saved, onSaved]);
 
   useEffect(() => {
     if (!dirty) {
@@ -72,41 +114,48 @@ export function EditorShell({
     setRevision((count) => count + 1);
   }
 
+  const nextSteps = nextStepsFor("editor", {
+    status: isPending ? "pending" : saveState.status,
+    dirty,
+  });
   const errors: Record<string, string> =
     saveState.status === "error"
       ? Object.fromEntries(saveState.errors.map((error) => [error.path, error.message]))
       : {};
 
   return (
-    <div className="flex min-h-full flex-col bg-canvas">
-      <header className="sticky top-0 z-10 border-b border-rule bg-panel">
-        <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
+    <div className="flex flex-1 flex-col bg-canvas">
+      {/*
+        The app header and the Content → Design → Preview bar sit above this (they are
+        the page's, not the form's), so the toolbar is the screen's own title and its
+        Save. It is not sticky: two stacked sticky bars on a phone eat the viewport.
+        The toolbar sits inside `<main>` (D-103): a title and a Save button outside every
+        landmark are content a screen reader cannot jump to.
+      */}
+      <main
+        id="main-content"
+        className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-5 px-4 py-4 sm:px-6"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-2">
           <div className="flex flex-col gap-0.5">
-            <Link
-              href="/dashboard"
-              className="inline-flex min-h-11 items-center text-sm text-ink-soft underline-offset-2 hover:text-ink hover:underline"
-            >
-              Dashboard
-            </Link>
-            <h1 className="text-xl font-semibold text-ink">Edit your portfolio</h1>
+            <h1 className="text-xl font-semibold text-ink">Content</h1>
+            <p className="text-sm text-ink-soft">
+              Write the portfolio. Design and preview are in the bar above.
+            </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Link href="/dashboard/design" className={BUTTON_SECONDARY}>
-              Design
-            </Link>
-            <Link href="/dashboard/preview" className={BUTTON_SECONDARY}>
-              Preview
-            </Link>
-            <button type="submit" form="editor-form" className={BUTTON_PRIMARY} disabled={isPending}>
-              {isPending ? "Saving…" : "Save"}
-            </button>
-          </div>
+          <button type="submit" form="editor-form" className={BUTTON_PRIMARY} disabled={isPending}>
+            {isPending ? "Saving…" : "Save"}
+          </button>
         </div>
-      </header>
 
-      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-5 px-4 py-6 sm:px-6">
-        <form id="editor-form" action={formAction} className="flex flex-col gap-5" noValidate>
+        <form
+          id="editor-form"
+          action={formAction}
+          className="flex flex-col gap-5"
+          noValidate
+          onSubmit={() => remember(state, revision)}
+        >
           <input
             type="hidden"
             name="payload"
@@ -132,6 +181,16 @@ export function EditorShell({
                   "All changes saved."
                 )}
           </p>
+
+          {nextSteps.length > 0 ? (
+            <div className="-mt-2 flex flex-wrap items-center gap-2">
+              {nextSteps.map((step) => (
+                <GuardedLink key={step.href} href={step.href} className={BUTTON_SECONDARY}>
+                  {step.label}
+                </GuardedLink>
+              ))}
+            </div>
+          ) : null}
 
           {saveState.status === "error" ? (
             <div

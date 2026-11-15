@@ -2,8 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { logoutAction } from "@/lib/auth/actions";
+import { AppHeader } from "@/components/app-header";
+import { AppShell } from "@/components/app-shell";
+import { GuardedLink } from "@/components/guarded-link";
+import { CARD, FOCUS_RING } from "@/editor/lib/styles";
 import { getCurrentUser, getOwnProfile } from "@/lib/auth/session";
+import { DASHBOARD_STEPS } from "@/lib/navigation/model";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureDraftPortfolio, readDraftPortfolio, type DraftReader } from "@/portfolio/draft";
 import { PublishCard } from "@/publish/components/publish-card";
@@ -39,21 +43,21 @@ export default async function DashboardPage() {
 
   if (profile === null) {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center gap-6 px-6 py-16">
-        <h1 className="text-2xl font-semibold text-ink">Your profile is missing</h1>
-        <p className="text-sm text-ink-soft">
-          Your account exists, but its profile row does not, so there is nothing to edit yet.
-          Please contact support and we will repair it.
-        </p>
-        <form action={logoutAction}>
-          <button
-            type="submit"
-            className="rounded-md border border-rule-strong px-4 py-2 text-sm font-medium text-ink hover:bg-canvas"
-          >
-            Log out
-          </button>
-        </form>
-      </main>
+      <AppShell header={<AppHeader />}>
+        <main
+          id="main-content"
+          className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center gap-6 px-6 py-16"
+        >
+          <h1 className="text-2xl font-semibold text-ink">Your profile is missing</h1>
+          <p className="text-sm text-ink-soft">
+            Your account exists, but its profile row does not, so there is nothing to edit yet.
+            Please contact support and we will repair it.
+          </p>
+          <Link href="/" className="w-fit text-sm text-ink underline underline-offset-2">
+            Back to Folio
+          </Link>
+        </main>
+      </AppShell>
     );
   }
 
@@ -94,82 +98,86 @@ export default async function DashboardPage() {
       : null;
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col gap-10 px-6 py-16">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex flex-col gap-1">
+    <AppShell header={<AppHeader />}>
+      <main
+        id="main-content"
+        className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-6 py-12"
+      >
+        <header className="flex flex-col gap-1">
           <p className="text-sm text-ink-soft">Signed in as @{profile.username}</p>
           <h1 className="text-2xl font-semibold text-ink">{profile.displayName}</h1>
           {profile.headline.trim().length > 0 ? (
             <p className="text-ink-soft">{profile.headline}</p>
           ) : null}
-        </div>
-        <form action={logoutAction}>
-          <button
-            type="submit"
-            className="rounded-md border border-rule-strong px-4 py-2 text-sm font-medium text-ink hover:bg-canvas"
-          >
-            Log out
-          </button>
-        </form>
-      </header>
+        </header>
 
-      <section
-        aria-labelledby="portfolio-heading"
-        className="flex flex-col gap-3 rounded-lg border border-rule bg-panel p-5"
-      >
-        <h2 id="portfolio-heading" className="text-lg font-medium text-ink">
-          Your portfolio
-        </h2>
-        <p className="text-sm text-ink-soft">
-          {publish === null || publish.state === "not-published"
-            ? "Your draft is private. Only you can see it until you publish."
-            : "Your draft stays private. Visitors only ever see the version you published."}
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href="/dashboard/edit"
-            className="inline-flex min-h-11 items-center rounded-md bg-cta px-4 text-sm font-medium text-cta-ink hover:bg-cta/90"
-          >
-            Edit your portfolio
-          </Link>
-          <Link
-            href="/dashboard/design"
-            className="inline-flex min-h-11 items-center rounded-md border border-rule-strong px-4 text-sm font-medium text-ink hover:bg-canvas"
-          >
-            Design
-          </Link>
-          <Link
-            href="/dashboard/preview"
-            className="inline-flex min-h-11 items-center rounded-md border border-rule-strong px-4 text-sm font-medium text-ink hover:bg-canvas"
-          >
-            Preview
-          </Link>
-          <Link
-            href="/search"
-            className="inline-flex min-h-11 items-center rounded-md border border-rule-strong px-4 text-sm font-medium text-ink hover:bg-canvas"
-          >
-            Search portfolios
-          </Link>
-        </div>
-      </section>
+        <section aria-labelledby="portfolio-heading" className={`${CARD} flex flex-col gap-4`}>
+          <div className="flex flex-col gap-1">
+            <h2 id="portfolio-heading" className="text-lg font-medium text-ink">
+              Your portfolio
+            </h2>
+            <p className="text-sm text-ink-soft">
+              {publish === null || publish.state === "not-published"
+                ? "Your draft is private. Only you can see it until you publish."
+                : "Your draft stays private. Visitors only ever see the version you published."}
+            </p>
+          </div>
 
-      {publish === null ? (
-        <section className="flex flex-col gap-2 rounded-lg border border-rule bg-panel p-5">
-          <h2 className="text-lg font-medium text-ink">Publishing</h2>
+          <ol className="flex flex-col gap-2">
+            {DASHBOARD_STEPS.map((step, index) => (
+              <li key={step.href}>
+                <GuardedLink
+                  href={step.href}
+                  className={`flex min-h-11 items-start gap-3 rounded-md border border-rule bg-canvas p-4 hover:border-rule-strong ${FOCUS_RING}`}
+                >
+                  <span
+                    aria-hidden
+                    className="mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-rule-strong text-xs font-medium tabular-nums text-ink-soft"
+                  >
+                    {index + 1}
+                  </span>
+                  <span className="flex flex-col gap-0.5">
+                    <span className="text-sm font-medium text-ink">{step.label}</span>
+                    <span className="text-sm text-ink-soft">{step.description}</span>
+                  </span>
+                </GuardedLink>
+              </li>
+            ))}
+          </ol>
+
           <p className="text-sm text-ink-soft">
-            We could not read your saved draft, so publishing is unavailable right now. Open the
-            editor, save your portfolio, then come back here.
+            Looking for ideas?{" "}
+            <Link href="/search" className="text-ink underline underline-offset-2">
+              Search the portfolios other people have published
+            </Link>
+            .
           </p>
-          <Link
-            href="/dashboard/edit"
-            className="inline-flex min-h-11 w-fit items-center rounded-md border border-rule-strong px-4 text-sm font-medium text-ink hover:bg-canvas"
-          >
-            Open the editor
-          </Link>
         </section>
-      ) : (
-        <PublishCard {...publish} />
-      )}
-    </main>
+
+        {publish === null ? (
+          <section
+            id="publish"
+            aria-labelledby="publishing-heading"
+            className={`${CARD} flex flex-col gap-2`}
+          >
+            <h2 id="publishing-heading" className="text-lg font-medium text-ink">
+              Publishing
+            </h2>
+            <p className="text-sm text-ink-soft">
+              We could not read your saved draft, so publishing is unavailable right now. Open
+              the editor, save your portfolio, then come back here.
+            </p>
+            <Link
+              href="/dashboard/edit"
+              className={`inline-flex min-h-11 w-fit items-center rounded-md border border-rule-strong px-4 text-sm font-medium text-ink hover:bg-canvas ${FOCUS_RING}`}
+            >
+              Open the editor
+            </Link>
+          </section>
+        ) : (
+          <PublishCard {...publish} />
+        )}
+      </main>
+    </AppShell>
   );
 }

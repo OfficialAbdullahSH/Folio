@@ -28,16 +28,111 @@ The screens around a portfolio — landing, signup, login, dashboard, editor, pr
 world and do not read a portfolio's design document. They use one palette defined in
 `src/app/globals.css`: twelve semantic tokens (`canvas`, `panel`, `ink`, `ink-soft`, `rule`,
 `rule-strong`, `cta`, `cta-ink`, `danger`, `danger-surface`, `warn`, `warn-surface`), declared
-once for light and once under
-`prefers-color-scheme: dark`, and exposed as Tailwind utilities through `@theme inline`
-(`bg-canvas`, `text-ink`, `border-rule-strong`, ...). `color-scheme` follows the same media
-query so native controls match the theme.
+once under `:root[data-theme="light"]` and once under `:root[data-theme="dark"]`, with
+`prefers-color-scheme` as the fallback before the script has run (X-02), and exposed as Tailwind
+utilities through `@theme inline` (`bg-canvas`, `text-ink`, `border-rule-strong`, ...).
+`color-scheme` follows the same value so native controls match the theme.
 
 App code names no Tailwind palette class (`text-stone-900`) and no raw color value, because a
 literal cannot follow a theme: the chrome used to name `stone-*` while `globals.css` flipped the
 body to near-black in dark mode, which rendered 1.04:1 text. `src/__tests__/app-chrome-colors.test.ts`
-enforces the rule. A world is unaffected: `ThemeScope` still sets its own colors on the element
-that wraps the rendered page (D-042).
+enforces the rule over `src/app`, `src/components` and `src/editor`. A world is unaffected:
+`ThemeScope` still sets its own colors on the element that wraps the rendered page (D-042).
+
+The only color literals left in app code are **design documents, not chrome** (D-101): the named
+looks in `src/builder/looks.ts`, the default design in `src/portfolio/defaults.ts`, the schema
+fixtures in `src/schema/fixtures/designs.ts`, and the demo portfolios in
+`src/search/demo-seed.ts`. Each of those holds a colour the owner's portfolio will use, so it is
+data, and `ThemeScope` turns it into CSS variables at render time. No component file in the app
+chrome carries one.
+
+## The app shell (X-01, X-02)
+
+Every Folio screen the owner sees is wrapped in the same shell (D-095 to D-101). A public
+portfolio is not: `/u/<username>` and the preview frame render only the owner's page, because
+the chrome belongs to Folio and the page belongs to the owner (D-100).
+
+| Piece | File | Contract |
+| --- | --- | --- |
+| Shell | `src/components/app-shell.tsx` | Client component. Mounts the theme provider and the unsaved-changes provider, moves focus to `main` after a client-side navigation, then the header and the page. Every app page renders it; no page re-implements any of it. It does not render the skip link: that lives in the header, because it has to be first in the tab order and inside a landmark (D-103). |
+| Header | `src/components/app-header.tsx` | Server component. Reads the session and the profile and hands `HeaderBar` either the signed-in or the signed-out set. A missing profile is not an error: the account name is shown and the handle is dropped. |
+| Header bar | `src/components/header-bar.tsx` | Client component. The skip link, the brand, the links for the current visitor, the theme control, and the account menu with Log out. Below 640 px the links and the theme control collapse into a disclosure menu with 44 px targets that opens, moves and closes with the keyboard, returning focus to its button. |
+| Tabs | `src/components/workflow-tabs.tsx` | Client component. Content, Design, Preview, each a guarded link, the current one marked `aria-current="page"`. |
+| Navigation model | `src/lib/navigation/model.ts` | One list per surface: `SIGNED_IN_NAV`, `SIGNED_OUT_NAV`, `WORKFLOW_TABS`, `DASHBOARD_STEPS`. The components read these, so no screen invents a label or a path and the tests can assert every destination. `isCurrentPath` matches the whole path, so `/dashboard` is not current inside the editor. |
+| Guard | `src/lib/navigation/guard.ts` | `leaveDecision({ dirty, currentPath, href })` answers `allow` or `confirm`. In-page anchors, the current page and anything that is not an app path are allowed; the decision is made before the router is asked to navigate. |
+| Guarded link | `src/components/guarded-link.tsx` | `next/link` until there is something to lose. Modified clicks are left to the browser, because the current page stays. |
+| Provider | `src/components/unsaved-changes.tsx` | Holds the dirty flag and the `discardToken`, and renders the leave dialog with Stay and Leave. The editor and the builder set the flag from their own revision counters; nothing else does. The token is what makes Leave a discard (D-104). |
+| Session | `src/lib/navigation/leave-session.ts` | `leaveSession(state, event)` as a pure reducer: `setDirty` changes the flag, `leave` clears it and bumps the token. |
+| Saved document | `src/lib/navigation/saved-document.ts`, `src/components/use-saved-document.ts` | Keeps the document the last successful save sent, keyed by the revision the action echoed back. A result for a revision the screen did not send is ignored, so a failed or stale save cannot become what Leave restores. |
+| Next steps | `src/lib/navigation/next-steps.ts` | `nextStepsFor(screen, save)` answers the links a saved screen offers, and nothing while it is pending, failed or dirty. The preview page always offers the publish link. |
+
+**Why the model is a module and not a prop.** The header, the tab bar and the dashboard steps
+describe the same five destinations from three angles. Keeping them in one file means a route
+that moves is edited once, and `model.test.ts` fails if a destination stops being reachable.
+The header and the tab bar repeat three links; that duplication is accepted (P-011b item 7)
+because they answer different questions — "where am I in the app" and "where am I in this job".
+
+**The return path (D-097).** `src/lib/auth/redirects.ts` sends an anonymous visitor from a
+protected page to `/login?next=<path>`, and the login action reads that value back through
+`safeNextPath` in `src/lib/navigation/next-path.ts`. `next` is attacker-controlled text, so it
+is accepted only when it is a same-site path: one leading slash, no scheme, no host, no
+backslash, no encoded separator, no control character, at most 512 characters. `//evil.example`
+and `/\evil.example` are both navigable to another origin by the browser, which is the open
+redirect the function exists to stop.
+
+**The unsaved-changes guard (D-098).** The editor and the builder each hold a revision counter
+that only their reducer changes; the page is dirty when the counter is ahead of the revision the
+last successful save echoed back. `GuardedLink` asks `leaveDecision` on click and, when the answer
+is `confirm`, opens one dialog and waits. Stay closes it and keeps the state; Leave clears the
+dirty flag, bumps the `discardToken` and pushes the route. `beforeunload` is registered separately
+for reloads and closes.
+
+Leave has to discard, and Next keeps a route it left mounted but hidden, so the screen's own state
+outlives the navigation: clearing the flag alone left the edited design alive and the guard re-armed on
+the next visit (D-104). The provider therefore counts Leave decisions, and each screen's form is keyed on
+that token, so Leave remounts the form from the document the last successful save wrote. The props are
+not that document: they are the server's render from when the screen opened, and a save on the screen does
+not change them, so restoring from the props would undo the last save.
+Browser back is **not** intercepted: the popstate event cannot be cancelled and re-issued
+reliably in the App Router, so it is documented as a known limit in `docs/NAVIGATION.md` rather
+than half-handled.
+
+**Next steps after an action (P-011c).** The editor and the builder offer the links that make
+sense next after a successful save, and only while nothing is unsaved: Design and Preview after
+content, Preview and the publish card after a design. The preview page always offers publishing, and
+the publish card keeps its "View your page" link. The publish links land on `/dashboard#publish`,
+the publish card's own id, which carries the main region's scroll offset so the sticky header cannot
+cover it. A success message that names no next step leaves the owner on the screen they just finished.
+
+### The theme (X-02)
+
+Three choices, one stored value, one resolution rule (D-099):
+
+| Piece | File | Contract |
+| --- | --- | --- |
+| Setting | `src/lib/theme/theme.ts` | `THEME_CHOICES` (`light`, `dark`, `system`), `THEME_STORAGE_KEY` (`folio-theme`), `parseThemeChoice` (anything unreadable, absent or unexpected means `system`), `resolveTheme(choice, systemPrefersDark)`, and `THEME_BOOTSTRAP_SCRIPT`. |
+| Pre-paint script | `src/lib/theme/theme.ts`, injected in `src/app/layout.tsx` | Runs in `<head>` before the body is parsed, reads storage inside a `try`, resolves the choice against `prefers-color-scheme` and sets `data-theme` on `html`. It sets the attribute and nothing else, because an inline style is an attribute React never rendered and the hydration check reports it. |
+| Provider | `src/lib/theme/theme-provider.tsx` | `useSyncExternalStore` over storage and the media query, so the value survives a server render and a second tab. A stored choice wins over the system; `setChoice` writes inside a `try`, so private browsing falls back to System instead of throwing. |
+| Palette | `src/app/globals.css` | `:root[data-theme="light"]` and `:root[data-theme="dark"]` define the twelve tokens; `prefers-color-scheme` is the fallback for `:root:not([data-theme])`, which is the state before the script runs and the state with JavaScript disabled. `color-scheme` follows the same value so native controls match. |
+
+**Why the script is a string.** A React effect runs after the first paint, which is exactly the
+flash of the wrong theme this avoids. A server-rendered component cannot read storage, so the
+only place left is a blocking inline script in the head. `theme.test.ts` runs the script's own
+source for every combination of stored value and system setting and compares the attribute it
+writes with `resolveTheme`, so the two paths cannot drift apart.
+
+**Why the app theme cannot reach a portfolio.** The palette lives on `html` as `data-theme`, and
+the world theme sets its six colours as CSS variables on the element that wraps the rendered
+page (D-042). The portfolio inside the preview frame is in another document with its own `html`,
+so the app theme cannot inherit into it (D-100).
+
+**Why every app route is dynamic.** The landing page, the 404 page, the auth pages and the
+signed-in pages show a header whose contents depend on the session, so they set
+`export const instant = false` (D-102). A prerendered shell would be correct for one visitor and
+wrong for the other, and the correction would arrive as a flash after hydration. The public
+portfolio route and the preview frame are dynamic already, for their own reason: they read
+`published_portfolios` and the saved draft. The app therefore has one rendering rule, and the
+header can be read on the server on every request.
 
 ## Worlds
 
@@ -396,17 +491,17 @@ The four actions share one shape: read the user and everything else on the serve
 
 ## Folder structure
 
-Built through F-07. F-08 and F-09 add the folders marked proposed.
+Built through X-02. F-08 adds the folders marked proposed.
 
 ```
 src/
   proxy.ts                            session refresh and route protection (Next 16 name for middleware)
   app/
     page.tsx                          landing page
-    layout.tsx                        root layout and metadata
+    layout.tsx                        root layout, metadata and the pre-paint theme script
     not-found.tsx                     the standard 404 page
-    (auth)/layout.tsx                 plain chrome for the auth pages
-    (auth)/login/page.tsx             log in
+    (auth)/layout.tsx                 the app shell around the auth pages
+    (auth)/login/page.tsx             log in, and the `next` path back to where the visitor was going
     (auth)/signup/page.tsx            sign up
     (auth)/_components/               the two forms and the shared field
     dashboard/page.tsx                the signed-in home; creates the draft on first visit
@@ -441,6 +536,16 @@ src/
     worlds/base/                      one neutral set of section components, kept as a reference
     worlds/editorial/                 Editorial shell, sections and stylesheet
     worlds/terminal/                  Terminal shell, sections and stylesheet
+  components/                         the app shell every screen shares (X-01, X-02)
+    app-shell.tsx                     theme, guard, focus after navigation, header, page
+    app-header.tsx                    the header with the session read on the server
+    header-bar.tsx                    skip link, brand, links, theme control, account menu, narrow-screen menu
+    workflow-tabs.tsx                 Content, Design, Preview
+    guarded-link.tsx                  a link that asks before it discards unsaved work
+    unsaved-changes.tsx               the dirty flag, the leave token and the leave dialog
+    use-saved-document.ts             the document the last successful save wrote (D-104)
+    theme-control.tsx                 Light, Dark, System
+    confirm-dialog.tsx                the one confirmation dialog, shared with the builder
   data/
     index.ts                          the sources the app imports: the published source, or the fixtures when no database is configured (D-084)
     fixtures/                         seven demo portfolios and the skill catalog
@@ -469,6 +574,16 @@ src/
     auth/actions.ts                   the Server Actions the forms call
     auth/session.ts                   getCurrentUser and getOwnProfile
     auth/redirects.ts                 the AC-6 rules as a pure function
+    navigation/model.ts               the header, tab and step destinations, and which one is current (D-095, D-096)
+    navigation/next-path.ts           the `next` value, accepted only as a same-site path (D-097)
+    navigation/guard.ts               the unsaved-changes rule, as a pure function (D-098)
+    navigation/leave-session.ts        the dirty flag and the leave token, as a pure reducer (D-104)
+    navigation/saved-document.ts       the document a successful save wrote, keyed by revision (D-104)
+    navigation/next-steps.ts           the links a saved screen offers next (P-011c)
+    navigation/__tests__/             Vitest tests for the five modules above
+    theme/theme.ts                    the three choices, the stored key, and the pre-paint script (D-099)
+    theme/theme-provider.tsx          the setting as a React store, over storage and the media query
+    theme/__tests__/                  the script against `resolveTheme`, and the provider's rules
   search/
     query.ts                          cleaning a query into terms, the parameter schemas, pagination and page links (D-090)
     resolve.ts                        a term to a skill slug through the F-05 resolver, and which lists a query shows (D-092, D-094)
@@ -515,6 +630,30 @@ docs/
 prompts/
 ```
 
+
+**Deviations recorded at X-01 and X-02 (2026-11-15)**
+
+- The shell is one client component, `AppShell`, rather than a layout per route. The header reads
+  the session on the server while the guard and the theme are browser state; every app page needs
+  all three, and a layout per route group would have had to be repeated for the auth pages, the
+  dashboard and the 404 page, which sits outside the groups.
+- The navigation model is a module (`src/lib/navigation/model.ts`), not props passed down. The
+  header, the tab bar and the dashboard steps describe the same destinations from three angles,
+  and one file is one place to change a route.
+- The header and the tab bar repeat Content, Design and Preview. Accepted by the owner (P-011b
+  item 7): the header answers "where am I in the app" and the tab bar answers "where am I in this
+  job".
+- Browser back is not intercepted. The guard covers in-app links and `beforeunload` covers reloads
+  and closes; popstate cannot be cancelled and re-issued reliably in the App Router, so the limit
+  is documented in `docs/NAVIGATION.md` rather than half-handled (D-098).
+- The theme is one `localStorage` string and one attribute on `html`, with no dependency. The
+  project does not use `next-themes`: the requirement is one resolution rule and one blocking
+  script, and each is tested against the other.
+- `src/components/` is new at this step. The chrome is shared by the landing page, the auth pages,
+  the dashboard and the three workflow screens, so it belongs to none of their features.
+- The 404 page offers Home and Search in its body and reaches the dashboard through the header it
+  renders. A dashboard link in the body would have to read the session inside the not-found
+  boundary, which Next.js renders without the route's data.
 
 **Deviations recorded at F-09 (2026-11-12)**
 
@@ -601,6 +740,11 @@ Written as rules code can be checked against, not as intentions.
 - S-16. The demo seed inserts users that cannot log in: no password, the `demo.folio.invalid` domain and fixed ids (D-093). The removal script deletes exactly those ids, in dependency order.
 - S-13. Storage writes are limited to the owner's own folder: the insert, update and delete policies on `storage.objects` require `(storage.foldername(name))[1]` to equal `auth.uid()`, and anonymous has no write policy at all (D-065).
 
+**Navigation and theme (X-01, X-02)**
+
+- S-17. A `next` path from the URL is accepted only by `safeNextPath`: one leading slash, no scheme, no host, no backslash, no encoded `/` or `\`, no control character, at most 512 characters. `//evil.example`, `/\evil.example`, `https://evil.example` and `javascript:` are refused, so the login page cannot be turned into an open redirect (D-097).
+- S-18. The theme is one attribute on `html` and one `localStorage` key holding one of three literal strings. Storage is read inside a `try` and an unexpected value is treated as `system`, so nothing a page stores can be executed or trusted as a class name (D-099).
+
 ## Sources of truth
 
 | File | Owns |
@@ -629,3 +773,4 @@ Written as rules code can be checked against, not as intentions.
 | `supabase/tests/rls-checklist.md` | The manual proof that the policies hold |
 | `DECISIONS.md` | Why anything is the way it is |
 | `docs/FEATURES.md` | Scope and dependency order |
+| `docs/ACCESSIBILITY.md` | The axe pass, screen by screen and theme by theme, and every finding that is still open (D-103) |

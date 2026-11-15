@@ -77,7 +77,11 @@ export function PublishCard({ state, publicPath, publishedOn, notes }: PublishCa
   }
 
   return (
-    <section aria-labelledby="publish-heading" className={cn(CARD, "flex flex-col gap-4")}>
+    <section
+      id="publish"
+      aria-labelledby="publish-heading"
+      className={cn(CARD, "flex flex-col gap-4")}
+    >
       <div className="flex flex-col gap-1">
         <h2 id="publish-heading" className="text-lg font-medium text-ink">
           Publishing

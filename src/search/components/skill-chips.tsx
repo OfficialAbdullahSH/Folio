@@ -34,12 +34,14 @@ export function SkillChips({
           <li key={slug}>
             <Link
               href={searchHref({ q: null, skill: slug, page: 1 })}
-              aria-label={`${name}, ${count} ${count === 1 ? "portfolio" : "portfolios"}`}
+              aria-label={`${name} ${count} ${count === 1 ? "portfolio" : "portfolios"}`}
               className="inline-flex min-h-11 items-center gap-2 rounded-full border border-rule-strong bg-panel px-4 text-sm text-ink transition-colors motion-reduce:transition-none hover:bg-canvas active:bg-rule focus-visible:ring-2 focus-visible:ring-cta focus-visible:ring-offset-2 focus-visible:ring-offset-canvas focus-visible:outline-none"
             >
               <span dir="auto">{name}</span>
+              {/* The space is part of the visible text on purpose: a name that does not
+                  contain what the link says fails WCAG 2.5.3 (D-103). */}
               <span aria-hidden="true" className="tabular-nums text-xs text-ink-soft">
-                {count}
+                {` ${count}`}
               </span>
             </Link>
           </li>

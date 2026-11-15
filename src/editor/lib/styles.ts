@@ -1,10 +1,10 @@
 /**
- * The editor's shared class strings, defined once.
+ * The app's shared class strings, defined once.
  *
  * Every value is a semantic token from the app palette in `src/app/globals.css`
- * (`canvas`, `panel`, `ink`, `ink-soft`, `rule`, `rule-strong`, `cta`, `danger`),
- * so a screen cannot drift into one-off colours and every surface follows the light
- * or the dark theme without a second class name. Touch targets are 44px
+ * (`canvas`, `panel`, `ink`, `ink-soft`, `rule`, `rule-strong`, `selected`, `cta`,
+ * `danger`), so a screen cannot drift into one-off colours and every surface follows
+ * the light or the dark theme without a second class name. Touch targets are 44px
  * (`min-h-11`), text is 16px on mobile so iOS does not zoom a field on focus, and
  * the focus ring is visible on both themes.
  */
@@ -41,3 +41,24 @@ export const ITEM_CARD = "rounded-md border border-rule bg-canvas p-4";
 
 export const CHIP =
   "inline-flex min-h-11 items-center gap-1.5 rounded-full border border-rule-strong bg-panel pl-4 pr-0.5 text-sm text-ink";
+
+/* The app chrome: the header, the skip link and the workflow tab bar. */
+
+export const FOCUS_RING =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cta focus-visible:ring-offset-2 focus-visible:ring-offset-panel";
+
+/** Clipped until it has focus, then a real 44px target at the top of the page. */
+export const SKIP_LINK =
+  "sr-only rounded-md bg-cta px-4 py-2 text-sm font-medium text-cta-ink focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:inline-flex focus:min-h-11 focus:items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cta focus-visible:ring-offset-2 focus-visible:ring-offset-canvas";
+
+/** A header destination. The current one is marked with weight and a surface. */
+export const NAV_LINK =
+  "inline-flex min-h-11 items-center rounded-md px-3 text-sm text-ink-soft transition-colors motion-reduce:transition-none hover:bg-canvas hover:text-ink active:bg-selected focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cta focus-visible:ring-offset-2 focus-visible:ring-offset-panel";
+
+export const NAV_LINK_CURRENT = "bg-selected font-medium text-ink";
+
+/** One step of the Content → Design → Preview bar. */
+export const TAB =
+  "inline-flex min-h-11 items-center border-b-2 border-transparent px-3 text-sm text-ink-soft transition-colors motion-reduce:transition-none hover:border-rule-strong hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cta focus-visible:ring-offset-2 focus-visible:ring-offset-panel";
+
+export const TAB_CURRENT = "border-ink font-medium text-ink";

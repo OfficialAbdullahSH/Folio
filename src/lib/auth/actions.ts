@@ -2,11 +2,13 @@
 
 import { redirect } from "next/navigation";
 
+import { safeNextPath } from "@/lib/navigation/next-path";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import { logInWithPassword } from "./login";
 import { logOut } from "./logout";
 import { AUTH_MESSAGES } from "./messages";
+import { SIGNED_OUT_PATH } from "./redirects";
 import { createSupabaseAuthPorts } from "./supabase-ports";
 import { signUpWithPassword } from "./signup";
 import type { AuthFormState } from "./types";
@@ -45,6 +47,7 @@ function readForm(formData: FormData) {
     password: String(formData.get("password") ?? ""),
     username: String(formData.get("username") ?? ""),
     displayName: String(formData.get("displayName") ?? ""),
+    next: String(formData.get("next") ?? ""),
   };
 }
 
@@ -71,7 +74,9 @@ export async function loginAction(
   );
 
   if (state.status === "ok") {
-    redirect("/dashboard");
+    // The return path is checked again here: the form field is as editable as the
+    // query string was, so it is never trusted as a redirect target (D-097).
+    redirect(safeNextPath(values.next) ?? "/dashboard");
   }
 
   return state;
@@ -87,5 +92,5 @@ export async function logoutAction(): Promise<void> {
     );
   }
 
-  redirect("/login");
+  redirect(SIGNED_OUT_PATH);
 }

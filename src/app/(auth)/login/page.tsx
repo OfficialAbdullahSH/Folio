@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { DASHBOARD_PATH } from "@/lib/auth/redirects";
 import { getCurrentUser } from "@/lib/auth/session";
+import { safeNextPath } from "@/lib/navigation/next-path";
 
 import { LoginForm } from "../_components/login-form";
 
@@ -16,26 +18,31 @@ export const metadata: Metadata = {
   description: "Log in to your Folio account.",
 };
 
-export default async function LoginPage() {
+type LoginPageProps = {
+  searchParams: Promise<{ next?: string | string[] }>;
+};
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const raw = (await searchParams).next;
+  const next = safeNextPath(Array.isArray(raw) ? raw[0] : raw);
   const user = await getCurrentUser();
 
   if (user !== null) {
-    redirect("/dashboard");
+    redirect(next ?? DASHBOARD_PATH);
   }
 
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-2">
-        <Link href="/" className="text-sm text-ink-soft underline underline-offset-2">
-          Folio
-        </Link>
         <h1 className="text-2xl font-semibold text-ink">Log in</h1>
         <p className="text-sm text-ink-soft">
-          Welcome back. Your draft is waiting where you left it.
+          {next === null
+            ? "Welcome back. Your draft is waiting where you left it."
+            : "Log in and we will take you back to the page you asked for."}
         </p>
       </header>
 
-      <LoginForm />
+      <LoginForm next={next} />
 
       <p className="text-sm text-ink-soft">
         No account yet?{" "}

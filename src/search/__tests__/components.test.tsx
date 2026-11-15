@@ -140,7 +140,7 @@ describe("SkillChips", () => {
 
     expect(html).toContain('href="/search?skill=react"');
     expect(html).toContain("React");
-    expect(html).toContain('aria-label="React, 5 portfolios"');
+    expect(html).toContain('aria-label="React 5 portfolios"');
   });
 });
 

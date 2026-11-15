@@ -1,11 +1,15 @@
 "use client";
 
 import { useActionState, useEffect, useReducer, useRef, useState } from "react";
-import Link from "next/link";
 
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { GuardedLink } from "@/components/guarded-link";
+import { useUnsavedChanges } from "@/components/unsaved-changes";
+import { useSavedDocument } from "@/components/use-saved-document";
 import { cn } from "@/editor/lib/cn";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY } from "@/editor/lib/styles";
 import { EditorSection } from "@/editor/components/section-card";
+import { nextStepsFor } from "@/lib/navigation/next-steps";
 import { sectionHasContent } from "@/render/sections";
 import type { ContentDocument, DesignDocument } from "@/schema";
 
@@ -15,7 +19,6 @@ import { lookIdFor } from "../looks";
 import { createDesignMessage } from "../messages";
 import { designReducer, type DesignAction } from "../reducer";
 import { ColorControls } from "./color-controls";
-import { ConfirmDialog } from "./confirm-dialog";
 import { LookGallery } from "./look-gallery";
 import { PreviewPane, type Device } from "./preview-pane";
 import { RadiusControl } from "./radius-control";
@@ -33,8 +36,29 @@ export type BuilderShellProps = {
   fontClassName: string;
 };
 
-export function BuilderShell({ design, content, fontClassName }: BuilderShellProps) {
-  const [state, dispatch] = useReducer(designReducer, design);
+export function BuilderShell(props: BuilderShellProps) {
+  const { discardToken } = useUnsavedChanges();
+  const [saved, setSaved] = useState<DesignDocument>(props.design);
+
+  // Leave means discard (D-104). Next keeps the route the owner left mounted but hidden,
+  // so its state outlives the navigation: a new key is what rebuilds the form from the
+  // saved design, and it also returns the status to "All changes saved".
+  return <BuilderForm key={discardToken} {...props} initial={saved} onSaved={setSaved} />;
+}
+
+type BuilderFormProps = BuilderShellProps & {
+  /** The design the server holds, which Leave restores. */
+  initial: DesignDocument;
+  onSaved: (design: DesignDocument) => void;
+};
+
+function BuilderForm({
+  content,
+  fontClassName,
+  initial,
+  onSaved,
+}: BuilderFormProps) {
+  const [state, dispatch] = useReducer(designReducer, initial);
   const [saveState, formAction, isPending] = useActionState(saveDesignAction, IDLE);
   const [revision, setRevision] = useState(0);
   const [tab, setTab] = useState<"design" | "preview">("design");
@@ -44,6 +68,8 @@ export function BuilderShell({ design, content, fontClassName }: BuilderShellPro
   const [confirmingReset, setConfirmingReset] = useState(false);
   const summaryRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const { setDirty: reportDirty } = useUnsavedChanges();
+  const { saved, remember, reportSaved } = useSavedDocument<DesignDocument>(initial);
 
   const savedRevision = saveState.status === "saved" ? saveState.revision : 0;
   const dirty = revision > savedRevision;
@@ -58,6 +84,23 @@ export function BuilderShell({ design, content, fontClassName }: BuilderShellPro
       summaryRef.current?.focus();
     }
   }, [saveState]);
+
+  // What Leave restores: the design the server holds, which is the one the last
+  // successful save sent. The page's props do not change when a save succeeds.
+  useEffect(() => {
+    reportSaved(saveState.status === "saved" ? saveState.revision : null);
+  }, [saveState, reportSaved]);
+
+  useEffect(() => {
+    onSaved(saved.document);
+  }, [saved, onSaved]);
+
+  // The header and the tab bar ask this before they navigate (D-098).
+  useEffect(() => {
+    reportDirty(dirty);
+
+    return () => reportDirty(false);
+  }, [dirty, reportDirty]);
 
   useEffect(() => {
     if (!dirty) {
@@ -94,6 +137,10 @@ export function BuilderShell({ design, content, fontClassName }: BuilderShellPro
     return () => window.clearTimeout(timer);
   }, [frameReady]);
 
+  const nextSteps = nextStepsFor("builder", {
+    status: isPending ? "pending" : saveState.status,
+    dirty,
+  });
   function change(action: DesignAction) {
     if (designReducer(state, action) === state) {
       return;
@@ -109,33 +156,31 @@ export function BuilderShell({ design, content, fontClassName }: BuilderShellPro
   }
 
   return (
-    <div className={cn(fontClassName, "flex min-h-dvh flex-col bg-canvas lg:h-dvh lg:overflow-hidden")}>
-      <header className="sticky top-0 z-20 border-b border-rule bg-panel lg:static">
-        <div className="flex w-full flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
+    <div className={cn(fontClassName, "flex flex-1 flex-col bg-canvas")}>
+      {/*
+        The app header and the Content → Design → Preview bar are the page's. This is
+        the screen's own toolbar: its title, its Save, and the phone switch between the
+        controls and the preview. It sits inside `<main>` (D-103), like the editor's.
+      */}
+      <main id="main-content" className="flex flex-1 flex-col">
+      <div className="border-b border-rule bg-panel">
+        <div className="flex w-full flex-wrap items-center justify-between gap-3 px-4 pt-6 pb-3 sm:px-6">
           <div className="flex flex-col gap-0.5">
-            <Link
-              href="/dashboard"
-              className="inline-flex min-h-11 items-center text-sm text-ink-soft underline-offset-2 hover:text-ink hover:underline"
-            >
-              Dashboard
-            </Link>
-            <h1 className="text-xl font-semibold text-ink">Design your portfolio</h1>
+            <h1 className="text-xl font-semibold text-ink">Design</h1>
+            <p className="text-sm text-ink-soft">
+              Pick a world and a look, then adjust anything. The preview is the real page.
+            </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Link href="/dashboard/preview" className={BUTTON_SECONDARY}>
-              Preview page
-            </Link>
-            <button type="submit" form="design-form" className={BUTTON_PRIMARY} disabled={isPending}>
-              {isPending ? "Saving…" : "Save"}
-            </button>
-          </div>
+          <button type="submit" form="design-form" className={BUTTON_PRIMARY} disabled={isPending}>
+            {isPending ? "Saving…" : "Save"}
+          </button>
         </div>
 
-        <div className="flex gap-1 border-t border-rule px-4 py-2 sm:px-6 lg:hidden">
+        <div className="flex gap-1 px-4 py-2 sm:px-6 lg:hidden">
           {(
             [
-              { id: "design", label: "Design" },
+              { id: "design", label: "Controls" },
               { id: "preview", label: "Preview" },
             ] as const
           ).map((entry) => (
@@ -145,7 +190,7 @@ export function BuilderShell({ design, content, fontClassName }: BuilderShellPro
               aria-pressed={tab === entry.id}
               onClick={() => setTab(entry.id)}
               className={cn(
-                "inline-flex min-h-11 flex-1 items-center justify-center rounded-md px-3 text-sm font-medium transition-colors motion-reduce:transition-none focus-visible:ring-2 focus-visible:ring-cta focus-visible:ring-offset-2 focus-visible:ring-offset-canvas focus-visible:outline-none",
+                "inline-flex min-h-11 flex-1 items-center justify-center rounded-md px-3 text-sm font-medium transition-colors motion-reduce:transition-none focus-visible:ring-2 focus-visible:ring-cta focus-visible:ring-offset-2 focus-visible:ring-offset-panel focus-visible:outline-none",
                 tab === entry.id
                   ? "bg-cta text-cta-ink"
                   : "border border-rule-strong bg-panel text-ink hover:bg-canvas",
@@ -155,16 +200,22 @@ export function BuilderShell({ design, content, fontClassName }: BuilderShellPro
             </button>
           ))}
         </div>
-      </header>
+      </div>
 
-      <div className="flex flex-1 flex-col lg:grid lg:min-h-0 lg:grid-cols-[minmax(0,30rem)_minmax(0,1fr)]">
+      <div className="flex flex-1 flex-col lg:grid lg:grid-cols-[minmax(0,30rem)_minmax(0,1fr)]">
         <div
           className={cn(
-            "min-w-0 px-4 py-6 sm:px-6 lg:overflow-y-auto lg:border-e lg:border-rule",
+            "min-w-0 px-4 py-6 sm:px-6 lg:border-e lg:border-rule",
             tab === "preview" && "hidden lg:block",
           )}
         >
-          <form id="design-form" action={formAction} className="flex flex-col gap-5" noValidate>
+          <form
+            id="design-form"
+            action={formAction}
+            className="flex flex-col gap-5"
+            noValidate
+            onSubmit={() => remember(state, revision)}
+          >
             <input
               type="hidden"
               name="payload"
@@ -190,6 +241,16 @@ export function BuilderShell({ design, content, fontClassName }: BuilderShellPro
                     "All changes saved."
                   )}
             </p>
+
+            {nextSteps.length > 0 ? (
+              <div className="-mt-2 flex flex-wrap items-center gap-2">
+                {nextSteps.map((step) => (
+                  <GuardedLink key={step.href} href={step.href} className={BUTTON_SECONDARY}>
+                    {step.label}
+                  </GuardedLink>
+                ))}
+              </div>
+            ) : null}
 
             {saveState.status === "error" ? (
               <div
@@ -305,7 +366,7 @@ export function BuilderShell({ design, content, fontClassName }: BuilderShellPro
 
         <div
           className={cn(
-            "min-w-0 flex-1 border-t border-rule p-4 sm:p-6 lg:min-h-0 lg:overflow-y-auto lg:border-t-0",
+            "min-w-0 flex-1 border-t border-rule p-4 sm:p-6 lg:border-t-0",
             tab === "design" && "hidden lg:block",
           )}
         >
@@ -319,6 +380,7 @@ export function BuilderShell({ design, content, fontClassName }: BuilderShellPro
           />
         </div>
       </div>
+      </main>
 
       <ConfirmDialog
         open={confirmingReset}

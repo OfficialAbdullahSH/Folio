@@ -7,13 +7,20 @@ import { initialAuthFormState } from "@/lib/auth/types";
 
 import { AuthField, FormMessage } from "./auth-field";
 
-export function LoginForm() {
+export type LoginFormProps = {
+  /** Where to go after logging in (D-097); null means the dashboard. */
+  next?: string | null;
+};
+
+export function LoginForm({ next = null }: LoginFormProps) {
   const [state, formAction, pending] = useActionState(loginAction, initialAuthFormState);
   const errors = state.fieldErrors ?? {};
 
   return (
     <form action={formAction} noValidate className="flex flex-col gap-4">
       <FormMessage message={state.message} />
+
+      {next === null ? null : <input type="hidden" name="next" value={next} />}
 
       <AuthField
         id="email"

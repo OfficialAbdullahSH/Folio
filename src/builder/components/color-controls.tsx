@@ -10,7 +10,7 @@ import { COLOR_ROLES, type ColorRole } from "../contrast";
 import { normalizeHexInput } from "../hex";
 import { COLOR_ROLE_HINTS, COLOR_ROLE_LABELS } from "../labels";
 
-const HEX_HINT = "Use six hex digits, for example #1c1917.";
+const HEX_HINT = "Six hex digits, with or without the leading hash.";
 
 export type ColorControlsProps = {
   colors: DesignTheme["colors"];

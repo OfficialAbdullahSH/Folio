@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { AppHeader } from "@/components/app-header";
+import { AppShell } from "@/components/app-shell";
+import { WorkflowTabs } from "@/components/workflow-tabs";
 import { EditorShell } from "@/editor/components/editor-shell";
 import type { Skill, SkillAlias } from "@/editor/skills";
 import { getCurrentUser, getOwnProfile } from "@/lib/auth/session";
@@ -68,37 +71,44 @@ export default async function EditPortfolioPage() {
 
   if (draft.status !== "ok") {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center gap-4 px-6 py-16">
-        <h1 className="text-2xl font-semibold text-ink">
-          We could not open your draft
-        </h1>
-        <p className="text-sm text-ink-soft">
-          {draft.status === "missing"
-            ? "Your draft row is missing. Reload the dashboard to create it, then try again."
-            : draft.status === "failed"
-              ? "The database did not answer. Try again in a moment."
-              : "The saved draft does not match the current format, so opening it here could lose it."}
-        </p>
-        <Link
-          href="/dashboard"
-          className="w-fit rounded-md border border-rule-strong px-4 py-2 text-sm font-medium text-ink hover:bg-canvas"
+      <AppShell header={<AppHeader />}>
+        <WorkflowTabs />
+        <main
+          id="main-content"
+          className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center gap-4 px-6 py-16"
         >
-          Back to the dashboard
-        </Link>
-      </main>
+          <h1 className="text-2xl font-semibold text-ink">We could not open your draft</h1>
+          <p className="text-sm text-ink-soft">
+            {draft.status === "missing"
+              ? "Your draft row is missing. Reload the dashboard to create it, then try again."
+              : draft.status === "failed"
+                ? "The database did not answer. Try again in a moment."
+                : "The saved draft does not match the current format, so opening it here could lose it."}
+          </p>
+          <Link
+            href="/dashboard"
+            className="w-fit rounded-md border border-rule-strong px-4 py-2 text-sm font-medium text-ink hover:bg-canvas"
+          >
+            Back to the dashboard
+          </Link>
+        </main>
+      </AppShell>
     );
   }
 
   const { skills, aliases } = await loadSkills();
 
   return (
-    <EditorShell
-      userId={user.id}
-      username={profile.username}
-      profile={{ displayName: profile.displayName, headline: profile.headline }}
-      content={draft.content}
-      skills={skills}
-      aliases={aliases}
-    />
+    <AppShell header={<AppHeader />}>
+      <WorkflowTabs />
+      <EditorShell
+        userId={user.id}
+        username={profile.username}
+        profile={{ displayName: profile.displayName, headline: profile.headline }}
+        content={draft.content}
+        skills={skills}
+        aliases={aliases}
+      />
+    </AppShell>
   );
 }

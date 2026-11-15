@@ -26,9 +26,7 @@ export default async function SignupPage() {
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-2">
-        <Link href="/" className="text-sm text-ink-soft underline underline-offset-2">
-          Folio
-        </Link>
+        <h1 className="text-2xl font-semibold text-ink">Create your account</h1>
         <h1 className="text-2xl font-semibold text-ink">Create your account</h1>
         <p className="text-sm text-ink-soft">
           Pick a username now: it becomes your public link and stays the same.

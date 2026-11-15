@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 
+import { AppHeader } from "@/components/app-header";
+import { AppShell } from "@/components/app-shell";
 import { ResultSection } from "@/search/components/result-section";
 import { SearchBox } from "@/search/components/search-box";
 import { NoMatches, NothingPublished, SearchFailed } from "@/search/components/search-states";
@@ -155,75 +156,73 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       : 0;
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-10 px-6 py-12 sm:py-16">
-      <header className="flex flex-col gap-6 border-b border-rule pb-8">
-        <Link
-          href="/"
-          className="w-fit text-sm font-medium tracking-widest text-ink-soft uppercase hover:text-ink focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-cta focus-visible:outline-none"
-        >
-          Folio
-        </Link>
+    <AppShell header={<AppHeader />}>
+      <main
+        id="main-content"
+        className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-10 px-6 py-10 sm:py-14"
+      >
+        <header className="flex flex-col gap-6 border-b border-rule pb-8">
+          <div className="flex flex-col gap-2">
+            <h1 className="text-3xl font-semibold tracking-tight text-ink sm:text-4xl">Search</h1>
+            <p className="max-w-prose text-ink-soft">
+              Find people by name, or by the skills they list. Every portfolio here is
+              published.
+            </p>
+          </div>
 
-        <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-semibold tracking-tight text-ink sm:text-4xl">Search</h1>
-          <p className="max-w-prose text-ink-soft">
-            Find people by name, or by the skills they list. Every portfolio here is
-            published.
-          </p>
-        </div>
-
-        <SearchBox
-          key={initialQuery}
-          skills={skills}
-          aliases={aliases}
-          initialQuery={initialQuery}
-        />
-      </header>
-
-      {outcome.status === "failed" || outcome.status === "unavailable" ? (
-        <SearchFailed retryHref={searchHref(params)} />
-      ) : null}
-
-      {outcome.status === "ok" && total === 0 ? (
-        plan.kind === "none" ? (
-          <NothingPublished />
-        ) : (
-          <NoMatches
-            query={params.q ?? nameFor(skillNames, params.skill ?? "")}
-            popular={popular}
-            skillNames={skillNames}
+          <SearchBox
+            key={initialQuery}
+            skills={skills}
+            aliases={aliases}
+            initialQuery={initialQuery}
           />
-        )
-      ) : null}
+        </header>
 
-      {outcome.status === "ok" && total > 0 ? (
-        <div className="flex flex-col gap-10">
-          {plan.kind === "none" && popular.length > 0 ? (
-            <section aria-labelledby="popular-skills" className="flex flex-col gap-3">
-              <h2 id="popular-skills" className="text-lg font-semibold text-ink">
-                Popular skills
-              </h2>
-              <SkillChips
-                label="Popular skills"
-                skills={popular}
-                skillNames={skillNames}
-              />
-            </section>
-          ) : null}
+        {outcome.status === "failed" || outcome.status === "unavailable" ? (
+          <SearchFailed retryHref={searchHref(params)} />
+        ) : null}
 
-          {outcome.sections.map((entry) => (
-            <ResultSection
-              key={entry.id}
-              id={entry.id}
-              title={entry.title}
-              description={entry.description}
-              params={params}
-              section={entry.section}
+        {outcome.status === "ok" && total === 0 ? (
+          plan.kind === "none" ? (
+            <NothingPublished />
+          ) : (
+            <NoMatches
+              query={params.q ?? nameFor(skillNames, params.skill ?? "")}
+              popular={popular}
               skillNames={skillNames}
             />
-          ))}
-        </div>
-      ) : null}
-    </main>
+          )
+        ) : null}
+
+        {outcome.status === "ok" && total > 0 ? (
+          <div className="flex flex-col gap-10">
+            {plan.kind === "none" && popular.length > 0 ? (
+              <section aria-labelledby="popular-skills" className="flex flex-col gap-3">
+                <h2 id="popular-skills" className="text-lg font-semibold text-ink">
+                  Popular skills
+                </h2>
+                <SkillChips
+                  label="Popular skills"
+                  skills={popular}
+                  skillNames={skillNames}
+                />
+              </section>
+            ) : null}
+
+            {outcome.sections.map((entry) => (
+              <ResultSection
+                key={entry.id}
+                id={entry.id}
+                title={entry.title}
+                description={entry.description}
+                params={params}
+                section={entry.section}
+                skillNames={skillNames}
+              />
+            ))}
+          </div>
+        ) : null}
+      </main>
+    </AppShell>
   );
 }

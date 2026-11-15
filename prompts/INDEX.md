@@ -16,6 +16,9 @@ Every prompt sent to DevAI is saved as its own file in this folder: `P-XXX-short
 | P-008 | P-008-F-06-visual-builder.md | F-06 | Visual builder at `/dashboard/design`, live preview frame, looks, readability warnings, save and reset | 2026-11-05 | answered; live verification run 2026-11-07, pending owner sign-off |
 | P-009 | P-009-F-07-publish.md | F-07 | Publish, unpublish, reset to the published version, Supabase-backed public source; adds D-080 to D-086 | 2026-11-07 | answered; live verification run 2026-11-07, pending owner sign-off |
 | P-010 | P-010-F-09-search.md | F-09 | Public `/search` with autocomplete, result cards, pagination and states; `0003_search.sql` with two indexes and two functions; generated demo seed; adds D-087 to D-094 | 2026-11-12 | answered; live verification run 2026-11-12, pending owner sign-off |
+| P-011 | P-011-navigation-and-theme.md | X-01, X-02 | App header, workflow tab bar, return path after login, unsaved-changes guard, light and dark theme; adds D-095 to D-101 | 2026-11-12 | answered, partly met (see P-011b) |
+| P-011b | P-011b-navigation-and-theme-completion.md | X-01, X-02 | Missing documents (`docs/NAVIGATION.md`), accessibility audit, wider color scan, sign-out destination, remaining live checks; adds D-102 | 2026-11-15 | answered, partly met (see P-011c) |
+| P-011c | P-011c-next-step-links-and-builder-leave.md | X-01 | Next-step links after a save in the editor, the builder and the preview, the publish card's `publish` anchor, and Leave as discard in the builder; adds D-104 | 2026-11-15 | in progress |
 
 ## Feature checklist
 
@@ -30,6 +33,8 @@ Every prompt sent to DevAI is saved as its own file in this folder: `P-XXX-short
 | F-07 | Publish to personal link | P-009 | yes (409 tests total) | live run 2026-11-07: publish, republish, reset, unpublish, copy link, the public page in an anonymous context, readability notes, the demo pages and three-width overflow verified with a temporary account; RLS checks and the invalid-data refusals still unit-only; pending owner sign-off |
 | F-08 | AI design assistant | | | |
 | F-09 | Search by name and skill | P-010 | yes (508 tests total) | live run 2026-11-12 against the owner's project with the demo seed: the no-query page, five spellings of React, a name prefix, an Arabic name, a hostile string, a skill chip, invalid and unknown slugs, the combobox keyboard path, the landing form, `noindex` and three-width overflow; a real page 2, both sections at once, the loading and error states, the dashboard link and the removal script still unit-only or unseen; pending owner sign-off |
+| X-01 | Navigation and flow between screens | P-011, P-011b, P-011c | yes (566 tests) | P-011b live run: two failures (the next-step links did not exist, Leave kept the builder's edit), fixed in P-011c; P-011c live checks not run |
+| X-02 | Light and dark theme | P-011, P-011b | yes (540 tests) | live checks not run |
 
 ## Conventions
 
